@@ -6,14 +6,19 @@ class Customer {
   final String name;
   final String address;
   final String phone;
+  final String city;
+  final double? openingBalance; // Add this field
 
-  Customer({required this.id, required this.name, required this.address, required this.phone});
+  Customer({required this.id, required this.name, required this.address, required this.phone,required this.city, this.openingBalance});
 
   Map<String, dynamic> toJson() {
     return {
       'name': name,
       'address': address,
       'phone': phone,
+      'city': city,
+      'openingBalance': openingBalance??0.0, // Include in JSON
+
     };
   }
 
@@ -23,6 +28,9 @@ class Customer {
       name: data['name'] ?? '',
       address: data['address'] ?? '',
       phone: data['phone'] ?? '',
+      city: data['city'] ?? '',
+      openingBalance: (data['openingBalance'] as num?)?.toDouble(), // Handle null
+
     );
   }
 }
@@ -42,14 +50,14 @@ class CustomerProvider with ChangeNotifier {
   }
 
 
-  Future<void> addCustomer(String name, String address, String phone) async {
+  Future<void> addCustomer(String name, String address, String phone, String city, [double openingBalance = 0.0]) async {
     final newCustomer = _dbRef.push();
-    await newCustomer.set({'name': name, 'address': address, 'phone': phone});
+    await newCustomer.set({'name': name, 'address': address, 'phone': phone,'city':city,'openingBalance': openingBalance});
     fetchCustomers(); // Refresh customer list
   }
 
-  Future<void> updateCustomer(String id, String name, String address, String phone) async {
-    await _dbRef.child(id).update({'name': name, 'address': address, 'phone': phone});
+  Future<void> updateCustomer(String id, String name, String address, String phone,String city, [double openingBalance = 0.0]) async {
+    await _dbRef.child(id).update({'name': name, 'address': address, 'phone': phone, 'city': city,'openingBalance': openingBalance});
     fetchCustomers(); // Refresh list
   }
 

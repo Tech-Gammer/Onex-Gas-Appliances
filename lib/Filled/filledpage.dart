@@ -225,7 +225,8 @@ class _filledpageState extends State<filledpage> {
             id: 'unknown',
             name: 'Unknown Customer',
             phone: '',
-            address: ''
+            address: '',
+            city: ''
         )
     );
     DateTime filledDate;
@@ -1537,70 +1538,6 @@ class _filledpageState extends State<filledpage> {
     return pw.MemoryImage(buffer);
   }
 
-
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   _fetchItems();
-  //
-  //   _currentFilled = widget.filled ?? {
-  //     'filledNumber': null,
-  //     'customerId': '',
-  //     'customerName': '',
-  //     'referenceNumber': '',
-  //     'items': [],
-  //     'subtotal': 0.0,
-  //     'discount': 0.0,
-  //     'grandTotal': 0.0,
-  //     'mazdoori': 0.0,
-  //     'paymentType': 'udhaar',
-  //     'paymentMethod': null,
-  //     'isFromQuotation': false,
-  //     'createdAt': DateTime.now().toIso8601String(),
-  //   };
-  //   _filledId = _currentFilled!['filledNumber']?.toString() ?? '';
-  //   _isReadOnly = widget.filled != null && widget.filled!['filledNumber'] != null;
-  //
-  //   // Initialize date controller
-  //   if (widget.filled != null && widget.filled!['createdAt'] != null) {
-  //     // Parse the existing date
-  //     DateTime filledDate = DateTime.parse(widget.filled!['createdAt']);
-  //     _dateController.text = DateFormat('yyyy-MM-dd').format(filledDate);
-  //   } else {
-  //     // Set to current date for new invoices
-  //     _dateController.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
-  //   }
-  //
-  //   // Safe controller initialization
-  //   _mazdooriController.text = (_currentFilled!['mazdoori'] as num?)?.toStringAsFixed(2) ?? '0.00';
-  //   _discountController.text = (_currentFilled!['discount'] as num?)?.toStringAsFixed(2) ?? '0.00';
-  //   _referenceController.text = _currentFilled!['referenceNumber']?.toString() ?? '';
-  //
-  //   // Payment type handling
-  //   _paymentType = _currentFilled!['paymentType']?.toString() ?? 'instant';
-  //   _instantPaymentMethod = _currentFilled!['paymentMethod']?.toString();
-  //
-  //   // Initialize customer provider with null checks
-  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-  //   customerProvider.fetchCustomers().then((_) {
-  //     final customerId = _currentFilled!['customerId']?.toString();
-  //     if (customerId != null && customerId.isNotEmpty) {
-  //       final customer = customerProvider.customers.firstWhere(
-  //             (c) => c.id == customerId,
-  //         orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
-  //       );
-  //       setState(() {
-  //         _selectedCustomerId = customer.id;
-  //         _selectedCustomerName = customer.name;
-  //       });
-  //       _fetchRemainingBalance();
-  //     }
-  //   });
-  //
-  //   // Initialize rows safely
-  //   _initializeRows();
-  // }
-
   @override
   void initState() {
     super.initState();
@@ -1658,7 +1595,7 @@ class _filledpageState extends State<filledpage> {
       if (customerId != null && customerId.isNotEmpty) {
         final customer = customerProvider.customers.firstWhere(
               (c) => c.id == customerId,
-          orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
+          orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '',city: ''),
         );
 
         setState(() {

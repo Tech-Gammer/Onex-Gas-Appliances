@@ -272,7 +272,7 @@ class _QuotationPageState extends State<QuotationPage> {
             (customer) => customer.id == _selectedCustomerId,
         orElse: () =>
             Customer(
-                id: 'unknown', name: 'Unknown Customer', phone: '', address: '')
+                id: 'unknown', name: 'Unknown Customer', phone: '', address: '',city: '')
     );
 
     final DateTime now = DateTime.now();
@@ -473,7 +473,9 @@ class _QuotationPageState extends State<QuotationPage> {
               Customer(id: 'unknown',
                   name: 'Unknown Customer',
                   phone: '',
-                  address: '')
+                  address: '',
+                  city: '',
+              )
       );
 
       // Prepare the quotation data
@@ -1493,9 +1495,9 @@ class _QuotationPageState extends State<QuotationPage> {
     );
   }
 
-  Widget _buildTermsSection
-      (BuildContext context,
-      LanguageProvider languageProvider) {
+  Widget _buildTermsSection(BuildContext context,
+      LanguageProvider languageProvider)
+  {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

@@ -178,7 +178,8 @@ import '../bankmanagement/banknames.dart';
               id: 'unknown',
               name: 'Unknown Customer',
               phone: '',
-              address: ''
+              address: '',
+            city: ''
           )
       );
       // // Get current date and time
@@ -1507,7 +1508,7 @@ import '../bankmanagement/banknames.dart';
           _selectedCustomerId = invoice['customerId'];
           final customer = customerProvider.customers.firstWhere(
                 (c) => c.id == _selectedCustomerId,
-            orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
+            orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '',city: ''),
           );
           setState(() {
             _selectedCustomerName = customer.name;
@@ -1712,7 +1713,7 @@ import '../bankmanagement/banknames.dart';
                   if (widget.invoice != null && _selectedCustomerId != null) {
                     final customer = customerProvider.customers.firstWhere(
                           (c) => c.id == _selectedCustomerId,
-                      orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
+                      orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '',city: ''),
                     );
                     _selectedCustomerName = customer.name; // Update name
                   }
