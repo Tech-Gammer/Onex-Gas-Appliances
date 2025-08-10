@@ -68,7 +68,58 @@ class _filledpageState extends State<filledpage> {
   TextEditingController _chequeNumberController = TextEditingController();
   DateTime? _selectedChequeDate;
   Map<String, Map<String, double>> _customerItemPrices = {};
+  bool _isAutoReference = false;
+  String _prefix = 'A';
+  int _lastNumber = 0;
+  final TextEditingController _autoReferenceController = TextEditingController();
 
+
+  Future<String> _generateAutoReferenceNumber({bool increment = true}) async {
+    // Get the last used number from Firebase
+    final counterRef = _db.child('autoReferenceCounter');
+    final snapshot = await counterRef.get();
+
+    if (snapshot.exists) {
+      final data = snapshot.value as Map<dynamic, dynamic>;
+      _prefix = data['prefix'] ?? 'A';
+      _lastNumber = data['lastNumber'] ?? 0;
+    }
+
+    if (increment) {
+      _lastNumber++;
+    }
+
+    // If number exceeds 9999, reset and increment prefix
+    if (_lastNumber > 9999) {
+      _lastNumber = 1;
+      _prefix = String.fromCharCode(_prefix.codeUnitAt(0) + 1);
+    }
+
+    // Save the new counter values only if incrementing
+    if (increment) {
+      await counterRef.set({
+        'prefix': _prefix,
+        'lastNumber': _lastNumber,
+      });
+    }
+
+    return '$_prefix-${_lastNumber.toString().padLeft(4, '0')}';
+  }
+
+  Future<void> _toggleReferenceMode(bool isAuto) async {
+    setState(() {
+      _isAutoReference = isAuto;
+    });
+
+    if (isAuto) {
+      // Generate without incrementing the counter
+      final autoRef = await _generateAutoReferenceNumber(increment: false);
+      _autoReferenceController.text = autoRef;
+      _referenceController.text = autoRef;
+    } else {
+      _referenceController.text = '';
+    }
+  }
 
   void _fetchCustomerPrices(String customerId) async {
     final DatabaseReference pricesRef = FirebaseDatabase.instance.ref().child('items');
@@ -1538,6 +1589,81 @@ class _filledpageState extends State<filledpage> {
     return pw.MemoryImage(buffer);
   }
 
+
+  //
+  // @override
+  // void initState() {
+  //   super.initState();
+  //
+  //   _fetchItems();
+  //
+  //   // Initialize _currentFilled with passed data or default structure
+  //   _currentFilled = widget.filled ?? {
+  //     'filledNumber': null,
+  //     'customerId': '',
+  //     'customerName': '',
+  //     'referenceNumber': '',
+  //     'items': [],
+  //     'subtotal': 0.0,
+  //     'discount': 0.0,
+  //     'grandTotal': 0.0,
+  //     'mazdoori': 0.0,
+  //     'paymentType': 'udhaar',
+  //     'paymentMethod': null,
+  //     'isFromQuotation': false,
+  //     'createdAt': DateTime.now().toIso8601String(),
+  //   };
+  //
+  //   _filledId = _currentFilled!['filledNumber']?.toString() ?? '';
+  //   _isReadOnly = widget.filled != null && widget.filled!['filledNumber'] != null;
+  //
+  //   // Initialize date controller
+  //   if (widget.filled != null && widget.filled!['createdAt'] != null) {
+  //     // Parse the existing date
+  //     DateTime filledDate = DateTime.parse(widget.filled!['createdAt']);
+  //     _dateController.text = DateFormat('yyyy-MM-dd').format(filledDate);
+  //   } else {
+  //     // Set to current date for new invoices
+  //     _dateController.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  //   }
+  //
+  //   // Safe controller initialization
+  //   _mazdooriController.text =
+  //       (_currentFilled!['mazdoori'] as num?)?.toStringAsFixed(2) ?? '0.00';
+  //
+  //   _discountController.text =
+  //       (_currentFilled!['discount'] as num?)?.toStringAsFixed(2) ?? '0.00';
+  //
+  //   _referenceController.text = _currentFilled!['referenceNumber']?.toString() ?? '';
+  //
+  //   // Payment type handling
+  //   _paymentType = _currentFilled!['paymentType']?.toString() ?? 'instant';
+  //   _instantPaymentMethod = _currentFilled!['paymentMethod']?.toString();
+  //
+  //   // Initialize customer provider with null checks
+  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+  //   customerProvider.fetchCustomers().then((_) {
+  //     final customerId = _currentFilled!['customerId']?.toString();
+  //
+  //     if (customerId != null && customerId.isNotEmpty) {
+  //       final customer = customerProvider.customers.firstWhere(
+  //             (c) => c.id == customerId,
+  //         orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '',city: ''),
+  //       );
+  //
+  //       setState(() {
+  //         _selectedCustomerId = customer.id;
+  //         _selectedCustomerName = customer.name;
+  //       });
+  //
+  //       _fetchRemainingBalance();
+  //     }
+  //   });
+  //
+  //   // Initialize rows safely
+  //   _initializeRows();
+  // }
+
   @override
   void initState() {
     super.initState();
@@ -1581,7 +1707,23 @@ class _filledpageState extends State<filledpage> {
     _discountController.text =
         (_currentFilled!['discount'] as num?)?.toStringAsFixed(2) ?? '0.00';
 
-    _referenceController.text = _currentFilled!['referenceNumber']?.toString() ?? '';
+    // Initialize reference number handling
+    if (widget.filled != null && widget.filled!['referenceNumber'] != null) {
+      // For existing filleds, use the saved reference number in manual mode
+      _referenceController.text = widget.filled!['referenceNumber'];
+      _isAutoReference = false;
+    } else {
+      // For new filleds, default to auto mode and generate reference
+      _isAutoReference = true;
+      _generateAutoReferenceNumber().then((autoRef) {
+        if (mounted) {
+          setState(() {
+            _autoReferenceController.text = autoRef;
+            _referenceController.text = autoRef;
+          });
+        }
+      });
+    }
 
     // Payment type handling
     _paymentType = _currentFilled!['paymentType']?.toString() ?? 'instant';
@@ -1598,10 +1740,12 @@ class _filledpageState extends State<filledpage> {
           orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '',city: ''),
         );
 
-        setState(() {
-          _selectedCustomerId = customer.id;
-          _selectedCustomerName = customer.name;
-        });
+        if (mounted) {
+          setState(() {
+            _selectedCustomerId = customer.id;
+            _selectedCustomerName = customer.name;
+          });
+        }
 
         _fetchRemainingBalance();
       }
@@ -2043,6 +2187,81 @@ class _filledpageState extends State<filledpage> {
     );
   }
 
+  // Widget _buildHeaderSection(BuildContext context, LanguageProvider languageProvider, {required bool isMobile}) {
+  //   return Card(
+  //     elevation: 2,
+  //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  //     child: Container(
+  //       padding: const EdgeInsets.all(20.0),
+  //       decoration: BoxDecoration(
+  //         borderRadius: BorderRadius.circular(12),
+  //         gradient: LinearGradient(
+  //           colors: [Colors.orange[50]!, Colors.amber[50]!],
+  //           begin: Alignment.topLeft,
+  //           end: Alignment.bottomRight,
+  //         ),
+  //       ),
+  //       child: Column(
+  //         children: [
+  //           Row(
+  //             children: [
+  //               Icon(Icons.receipt_long, color: Colors.orange[700], size: 24),
+  //               const SizedBox(width: 8),
+  //               Text(
+  //                 languageProvider.isEnglish ? 'Invoice Details' : 'انوائس کی تفصیلات',
+  //                 style: TextStyle(
+  //                   fontSize: 18,
+  //                   fontWeight: FontWeight.w600,
+  //                   color: Colors.orange[800],
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //           const SizedBox(height: 20),
+  //           if (isMobile) ...[
+  //             _buildTextField(
+  //               controller: _referenceController,
+  //               label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+  //               icon: Icons.tag,
+  //             ),
+  //             const SizedBox(height: 16),
+  //             _buildTextField(
+  //               controller: _dateController,
+  //               label: languageProvider.isEnglish ? 'Date' : 'تاریخ',
+  //               icon: Icons.calendar_today,
+  //               readOnly: true,
+  //               onTap: () => _selectDate(context),
+  //             ),
+  //           ] else ...[
+  //             Row(
+  //               children: [
+  //                 Expanded(
+  //                   child: _buildTextField(
+  //                     controller: _referenceController,
+  //                     label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+  //                     icon: Icons.tag,
+  //                   ),
+  //                 ),
+  //                 const SizedBox(width: 16),
+  //                 Expanded(
+  //                   child: _buildTextField(
+  //                     controller: _dateController,
+  //                     label: languageProvider.isEnglish ? 'Date' : 'تاریخ',
+  //                     icon: Icons.calendar_today,
+  //                     readOnly: true,
+  //                     onTap: () => _selectDate(context),
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //           ],
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
+
   Widget _buildHeaderSection(BuildContext context, LanguageProvider languageProvider, {required bool isMobile}) {
     return Card(
       elevation: 2,
@@ -2075,10 +2294,27 @@ class _filledpageState extends State<filledpage> {
             ),
             const SizedBox(height: 20),
             if (isMobile) ...[
-              _buildTextField(
-                controller: _referenceController,
-                label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
-                icon: Icons.tag,
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _isAutoReference ? _autoReferenceController : _referenceController,
+                      label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+                      icon: Icons.tag,
+                      readOnly: _isAutoReference,
+                    ),
+                  ),
+                  Switch(
+                    value: _isAutoReference,
+                    onChanged: (value) => _toggleReferenceMode(value),
+                    activeColor: Colors.green,
+                  ),
+                  Text(
+                    _isAutoReference
+                        ? (languageProvider.isEnglish ? 'Auto' : 'آٹو')
+                        : (languageProvider.isEnglish ? 'Manual' : 'مینوئل'),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               _buildTextField(
@@ -2092,10 +2328,27 @@ class _filledpageState extends State<filledpage> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildTextField(
-                      controller: _referenceController,
-                      label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
-                      icon: Icons.tag,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _isAutoReference ? _autoReferenceController : _referenceController,
+                            label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+                            icon: Icons.tag,
+                            readOnly: _isAutoReference,
+                          ),
+                        ),
+                        Switch(
+                          value: _isAutoReference,
+                          onChanged: (value) => _toggleReferenceMode(value),
+                          activeColor: Colors.green,
+                        ),
+                        Text(
+                          _isAutoReference
+                              ? (languageProvider.isEnglish ? 'Auto' : 'آٹو')
+                              : (languageProvider.isEnglish ? 'Manual' : 'مینوئل'),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -2967,6 +3220,10 @@ class _filledpageState extends State<filledpage> {
 
                 // Always save as new fill when coming from quotation
                 if (widget.filled?['isFromQuotation'] ?? false) {
+                  // Only increment when saving a new invoice
+                  final autoRef = await _generateAutoReferenceNumber(increment: true);
+                  _referenceController.text = autoRef;
+
                   await filledProvider.saveFilled(
                     filledId: filledNumber,
                     filledNumber: filledNumber,
