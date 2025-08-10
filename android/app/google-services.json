@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "521570815282",
+    "project_id": "onex-gas-appliances",
+    "storage_bucket": "onex-gas-appliances.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:521570815282:android:37511c0622ad8fcb615b2b",
+        "android_client_info": {
+          "package_name": "com.example.onex_gas_appliances"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDP98qHJa9xjUsabI5IB4vhnw2TXYclstM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
