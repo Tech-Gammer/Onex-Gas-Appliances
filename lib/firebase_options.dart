@@ -48,6 +48,7 @@ class DefaultFirebaseOptions {
     authDomain: 'onex-gas-appliances.firebaseapp.com',
     storageBucket: 'onex-gas-appliances.firebasestorage.app',
     measurementId: 'G-JG3G1WHQBZ',
+    databaseURL: 'https://onex-gas-appliances-default-rtdb.firebaseio.com/'
   );
 
   static const FirebaseOptions android = FirebaseOptions(
