@@ -210,400 +210,388 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     return pw.MemoryImage(buffer);
   }
 
+
   Future<void> _generateAndPrintPDF(
       Map<String, dynamic> report,
       List<Map<String, dynamic>> transactions,
-      bool shouldShare,
+      bool isShare
       )
   async {
-    final pdf = pw.Document();
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    final reportProvider = Provider.of<FilledCustomerReportProvider>(context, listen: false);
-    final font = await PdfGoogleFonts.robotoRegular();
+    try {
+      final pdf = pw.Document();
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
-    double totalDebit = 0.0;
-    double totalCredit = 0.0;
+      // Create Urdu text images if needed
+      pw.MemoryImage? customerNameImage;
+      pw.MemoryImage? phoneNumberImage;
 
-    for (var transaction in transactions) {
-      totalDebit += transaction['debit'] ?? 0.0;
-      totalCredit += transaction['credit'] ?? 0.0;
-    }
-
-    double totalBalance = totalCredit - totalDebit;
-    String printDate = DateFormat('dd MMM yyyy').format(DateTime.now());
-
-    // Load images
-    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
-    final footerBuffer = footerBytes.buffer.asUint8List();
-    final footerLogo = pw.MemoryImage(footerBuffer);
-
-    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
-    final buffer = bytes.buffer.asUint8List();
-    final image = pw.MemoryImage(buffer);
-
-    final customerDetailsImage = await _createTextImage('Customer Name: ${widget.customerName}');
-
-    // Preload bank logos for PDF
-    Map<String, pw.MemoryImage> bankLogoImages = {};
-    for (var bank in pakistaniBanks) {
-      try {
-        final logoBytes = await rootBundle.load(bank.iconPath);
-        final logoBuffer = logoBytes.buffer.asUint8List();
-        bankLogoImages[bank.name.toLowerCase()] = pw.MemoryImage(logoBuffer);
-      } catch (e) {
-        print('Error loading bank logo: ${bank.iconPath} - $e');
+      if (!languageProvider.isEnglish) {
+        customerNameImage = await _createTextImage(widget.customerName);
+        phoneNumberImage = await _createTextImage('فون نمبر: ${widget.customerPhone}');
       }
-    }
 
-    // Build PDF content
-    List<pw.Widget> pdfContent = [];
+      // Calculate running balance
+      double runningBalance = (report['openingBalance'] ?? 0).toDouble();
+      List<Map<String, dynamic>> transactionsWithBalance = [];
 
-    // Header
-    pdfContent.add(
-      pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Image(image, width: 80, height: 80, dpi: 1000),
-        ],
-      ),
-    );
+      for (var transaction in transactions) {
+        final debit = (transaction['debit'] ?? 0).toDouble();
+        final credit = (transaction['credit'] ?? 0).toDouble();
+        runningBalance = runningBalance - debit + credit;
 
-    pdfContent.add(pw.SizedBox(height: 20));
+        transactionsWithBalance.add({
+          ...transaction,
+          'runningBalance': runningBalance,
+        });
+      }
 
-    pdfContent.add(
-      pw.Text('Customer Ledger',
-          style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-    );
-
-    pdfContent.add(pw.SizedBox(height: 20));
-
-    pdfContent.add(pw.Image(customerDetailsImage, width: 300, dpi: 1000));
-    pdfContent.add(pw.Text('Phone Number: ${widget.customerPhone}', style: pw.TextStyle(fontSize: 18)));
-    pdfContent.add(pw.SizedBox(height: 10));
-    pdfContent.add(pw.Text('Print Date: $printDate',
-        style: pw.TextStyle(fontSize: 16, color: PdfColors.grey)));
-    pdfContent.add(pw.SizedBox(height: 20));
-
-    // Add opening balance if exists
-    final openingBalance = reportProvider.openingBalance ?? 0;
-    if (openingBalance > 0) {
-      pdfContent.add(
-        pw.Container(
-          padding: pw.EdgeInsets.all(10),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.grey100,
-            border: pw.Border.all(color: PdfColors.grey300),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text('Opening Balance', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-              pw.Text('Rs ${openingBalance.toStringAsFixed(2)}',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: PdfColors.green)),
-            ],
-          ),
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(20),
+          header: (context) => _buildPDFHeader(languageProvider, customerNameImage, phoneNumberImage),
+          footer: (context) => _buildPDFFooter(context),
+          build: (context) => [
+            _buildPDFSummary(report),
+            pw.SizedBox(height: 20),
+            _buildPDFTransactionTable(transactionsWithBalance, languageProvider, report),
+          ],
         ),
       );
-      pdfContent.add(pw.SizedBox(height: 20));
+
+      if (isShare) {
+        await _sharePDF(pdf);
+      } else {
+        await _printPDF(pdf);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
+  }
 
-    pdfContent.add(
-      pw.Text('Transactions:',
-          style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-    );
-
-    // Main Transaction Table
-    pdfContent.add(
-      pw.Table(
-        columnWidths: {
-          0: const pw.FlexColumnWidth(1.5),
-          1: const pw.FlexColumnWidth(1),
-          2: const pw.FlexColumnWidth(1),
-          3: const pw.FlexColumnWidth(1.5),
-          4: const pw.FlexColumnWidth(1.5),
-          5: const pw.FlexColumnWidth(1.2),
-          6: const pw.FlexColumnWidth(1.2),
-          7: const pw.FlexColumnWidth(1.2),
-        },
+  pw.Widget _buildPDFHeader(
+      LanguageProvider languageProvider,
+      pw.MemoryImage? customerNameImage,
+      pw.MemoryImage? phoneNumberImage,
+      )
+  {
+    return pw.Container(
+      padding: pw.EdgeInsets.only(bottom: 20),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey400)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          // Header row
-          pw.TableRow(
-            children: [
-              _buildPdfHeaderCell('Date'),
-              _buildPdfHeaderCell('Filled #'),
-              _buildPdfHeaderCell('T-Type'),
-              _buildPdfHeaderCell('Payment Method'),
-              _buildPdfHeaderCell('Bank'),
-              _buildPdfHeaderCell('Debit(-)'),
-              _buildPdfHeaderCell('Credit(+)'),
-              _buildPdfHeaderCell('Balance'),
-            ],
+          // Company/App Title
+          pw.Text(
+            'Customer Ledger Report',
+            style: pw.TextStyle(
+              fontSize: 24,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.orange700,
+            ),
           ),
-          // Data rows
-          ...transactions.map((transaction) {
-            final bankName = _getBankName(transaction);
-            final bankLogo = bankName != null ? bankLogoImages[bankName.toLowerCase()] : null;
-            final isInvoice = (transaction['credit'] ?? 0) != 0;
+          pw.SizedBox(height: 10),
 
-            return pw.TableRow(
-              children: [
-                _buildPdfCell(DateFormat('dd MMM yyyy, hh:mm a')
-                    .format(DateTime.parse(transaction['date']))),
-                _buildPdfCell(transaction['referenceNumber'] ?? transaction['filledNumber'] ?? '-'),
-                _buildPdfCell(isInvoice ? 'Invoice' : 'Payment'),
-                _buildPdfCell(transaction['paymentMethod'] ?? '-'),
-                pw.Row(
-                  children: [
-                    if (bankLogo != null)
-                      pw.Container(
-                        height: 20,
-                        width: 40,
-                        margin: const pw.EdgeInsets.only(right: 2),
-                        child: pw.Image(bankLogo),
-                      ),
-                    pw.Expanded(child: _buildPdfCell(bankName ?? '-')),
-                  ],
-                ),
-                _buildPdfCell(transaction['debit'] != 0.0
-                    ? 'Rs ${transaction['debit']?.toStringAsFixed(2)}'
-                    : '-'),
-                _buildPdfCell(transaction['credit'] != 0.0
-                    ? 'Rs ${transaction['credit']?.toStringAsFixed(2)}'
-                    : '-'),
-                _buildPdfCell('Rs ${transaction['balance']?.toStringAsFixed(2)}'),
-              ],
-            );
-          }).toList(),
-          // Total row
-          pw.TableRow(
-            children: [
-              _buildPdfCell('Total', isHeader: true),
-              _buildPdfCell(''),
-              _buildPdfCell(''),
-              _buildPdfCell(''),
-              _buildPdfCell(''),
-              _buildPdfCell('Rs ${totalDebit.toStringAsFixed(2)}', isHeader: true),
-              _buildPdfCell('Rs ${totalCredit.toStringAsFixed(2)}', isHeader: true),
-              _buildPdfCell('Rs ${totalBalance.toStringAsFixed(2)}', isHeader: true),
-            ],
+          // Customer Information
+          if (languageProvider.isEnglish) ...[
+            pw.Text(
+              widget.customerName,
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text(
+              'Phone: ${widget.customerPhone}',
+              style: pw.TextStyle(fontSize: 14, color: PdfColors.grey700),
+            ),
+          ] else ...[
+            if (customerNameImage != null)
+              pw.Image(customerNameImage, height: 30),
+            if (phoneNumberImage != null)
+              pw.Image(phoneNumberImage, height: 20),
+          ],
+
+          pw.SizedBox(height: 5),
+
+          // Date Range
+          pw.Text(
+            selectedDateRange == null
+                ? 'All Transactions'
+                : '${DateFormat('dd MMM yyyy').format(selectedDateRange!.start)} - ${DateFormat('dd MMM yyyy').format(selectedDateRange!.end)}',
+            style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+          ),
+
+          pw.Text(
+            'Generated on: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}',
+            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey500),
           ),
         ],
       ),
     );
+  }
 
-    // Add invoice details for expanded transactions
+  pw.Widget _buildPDFFooter(pw.Context context) {
+    return pw.Container(
+      alignment: pw.Alignment.centerRight,
+      margin: const pw.EdgeInsets.only(top: 10),
+      child: pw.Text(
+        'Page ${context.pageNumber} of ${context.pagesCount}',
+        style: pw.TextStyle(fontSize: 10, color: PdfColors.grey500),
+      ),
+    );
+  }
+
+  pw.Widget _buildPDFSummary(Map<String, dynamic> report) {
+    return pw.Container(
+      padding: pw.EdgeInsets.all(15),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.orange50,
+        border: pw.Border.all(color: PdfColors.orange200),
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+        children: [
+          _buildPDFSummaryCard('Total Debit', 'Rs ${(report['debit'] ?? 0).toStringAsFixed(2)}', PdfColors.red),
+          _buildPDFSummaryCard('Total Credit', 'Rs ${(report['credit'] ?? 0).toStringAsFixed(2)}', PdfColors.green),
+          _buildPDFSummaryCard('Net Balance', 'Rs ${(report['balance'] ?? 0).toStringAsFixed(2)}', PdfColors.orange700),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildPDFSummaryCard(String title, String value, PdfColor color) {
+    return pw.Column(
+      children: [
+        pw.Text(title, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: color)),
+        pw.SizedBox(height: 5),
+        pw.Text(value, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+      ],
+    );
+  }
+
+  pw.Widget _buildPDFTransactionTable(
+      List<Map<String, dynamic>> transactions,
+      LanguageProvider languageProvider,
+      Map<String, dynamic> report,
+      )
+  {
+    final headers = [
+      languageProvider.isEnglish ? 'Date' : 'Date',
+      languageProvider.isEnglish ? 'Details' : 'Details',
+      languageProvider.isEnglish ? 'Type' : 'Type',
+      languageProvider.isEnglish ? 'Payment Method' : 'Method',
+      languageProvider.isEnglish ? 'Bank' : 'Bank',
+      languageProvider.isEnglish ? 'Debit' : 'Debit',
+      languageProvider.isEnglish ? 'Credit' : 'Credit',
+      languageProvider.isEnglish ? 'Balance' : 'Balance',
+    ];
+
+    List<List<String>> tableData = [];
+
+    // Add opening balance row if exists
+    final openingBalance = (report['openingBalance'] ?? 0).toDouble();
+    if (openingBalance > 0) {
+      tableData.add([
+        '',
+        'Opening Balance',
+        '',
+        '',
+        '',
+        '',
+        'Rs ${openingBalance.toStringAsFixed(2)}',
+        'Rs ${openingBalance.toStringAsFixed(2)}',
+      ]);
+    }
+
+    // Add transactions
     for (var transaction in transactions) {
+      final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
+      final details = transaction['details']?.toString() ??
+          transaction['referenceNumber']?.toString() ??
+          transaction['filledNumber']?.toString() ?? '-';
       final isInvoice = (transaction['credit'] ?? 0) != 0;
-      final transactionKey = transaction['key']?.toString() ?? '';
-      final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);
+      final paymentMethod = transaction['paymentMethod']?.toString() ?? '-';
+      final bankName = _getBankName(transaction) ?? '-';
+      final debit = (transaction['debit'] ?? 0) > 0 ? 'Rs ${(transaction['debit']).toStringAsFixed(2)}' : '-';
+      final credit = (transaction['credit'] ?? 0) > 0 ? 'Rs ${(transaction['credit']).toStringAsFixed(2)}' : '-';
+      final balance = 'Rs ${(transaction['runningBalance']).toStringAsFixed(2)}';
 
-      if (isInvoice && isExpanded) {
-        final invoiceItems = reportProvider.invoiceItems[transactionKey] ?? [];
-        final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
+      tableData.add([
+        DateFormat('dd/MM/yy').format(date),
+        details.length > 20 ? '${details.substring(0, 17)}...' : details,
+        isInvoice ? 'Invoice' : 'Payment',
+        _getPaymentMethodText(paymentMethod, languageProvider),
+        bankName.length > 15 ? '${bankName.substring(0, 12)}...' : bankName,
+        debit,
+        credit,
+        balance,
+      ]);
+    }
 
-        pdfContent.add(pw.SizedBox(height: 15));
-
-        // Invoice header
-        pdfContent.add(
-          pw.Container(
-            padding: pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.orange100,
-              border: pw.Border.all(color: PdfColors.orange300),
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Transaction Details (${transactions.length} entries)',
+          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.SizedBox(height: 10),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey400),
+          columnWidths: {
+            0: pw.FixedColumnWidth(60),  // Date
+            1: pw.FixedColumnWidth(80),  // Details
+            2: pw.FixedColumnWidth(50),  // Type
+            3: pw.FixedColumnWidth(60),  // Payment Method
+            4: pw.FixedColumnWidth(70),  // Bank
+            5: pw.FixedColumnWidth(60),  // Debit
+            6: pw.FixedColumnWidth(60),  // Credit
+            7: pw.FixedColumnWidth(60),  // Balance
+          },
+          children: [
+            // Header row
+            pw.TableRow(
+              decoration: pw.BoxDecoration(color: PdfColors.orange100),
+              children: headers.map((header) =>
+                  pw.Padding(
+                    padding: pw.EdgeInsets.all(4),
+                    child: pw.Text(
+                      header,
+                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                  ),
+              ).toList(),
             ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text(
-                  'Invoice Items - ${DateFormat('dd MMM yyyy').format(date)}',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+            // Data rows
+            ...tableData.map((row) =>
+                pw.TableRow(
+                  children: row.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final cell = entry.value;
+                    PdfColor? textColor;
+
+                    // Color coding for amounts
+                    if (index == 5 && cell.startsWith('Rs')) { // Debit column
+                      textColor = PdfColors.red;
+                    } else if (index == 6 && cell.startsWith('Rs')) { // Credit column
+                      textColor = PdfColors.green;
+                    } else if (index == 7) { // Balance column
+                      textColor = PdfColors.blue800;
+                    }
+
+                    return pw.Padding(
+                      padding: pw.EdgeInsets.all(4),
+                      child: pw.Text(
+                        cell,
+                        style: pw.TextStyle(
+                          fontSize: 7,
+                          color: textColor ?? PdfColors.black,
+                          fontWeight: index == 7 ? pw.FontWeight.bold : pw.FontWeight.normal,
+                        ),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    );
+                  }).toList(),
                 ),
-                pw.Text(
-                  'Total: Rs ${(transaction['credit'] ?? 0).toStringAsFixed(2)}',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: PdfColors.green),
-                ),
-              ],
-            ),
+            ).toList(),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _printPDF(pw.Document pdf) async {
+    try {
+      if (kIsWeb) {
+        // Web platform - download PDF
+        final bytes = await pdf.save();
+        final blob = html.Blob([bytes], 'application/pdf');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.document.createElement('a') as html.AnchorElement
+          ..href = url
+          ..style.display = 'none'
+          ..download = 'customer_ledger_${widget.customerName}_${DateFormat('ddMMyyyy').format(DateTime.now())}.pdf';
+        html.document.body?.children.add(anchor);
+        anchor.click();
+        html.document.body?.children.remove(anchor);
+        html.Url.revokeObjectUrl(url);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF downloaded successfully!'),
+            backgroundColor: Colors.green,
           ),
         );
-
-        if (invoiceItems.isNotEmpty) {
-          // Invoice items table
-          pdfContent.add(
-            pw.Table(
-              columnWidths: {
-                0: const pw.FlexColumnWidth(3),
-                1: const pw.FlexColumnWidth(1),
-                2: const pw.FlexColumnWidth(1.5),
-                3: const pw.FlexColumnWidth(1.5),
-              },
-              children: [
-                // Invoice items header
-                pw.TableRow(
-                  children: [
-                    _buildPdfHeaderCell('Item Name'),
-                    _buildPdfHeaderCell('Quantity'),
-                    _buildPdfHeaderCell('Unit Price'),
-                    _buildPdfHeaderCell('Total'),
-                  ],
-                ),
-                // Invoice items data
-                ...invoiceItems.map((item) {
-                  return pw.TableRow(
-                    children: [
-                      _buildPdfCell(item['itemName']?.toString() ?? '-'),
-                      _buildPdfCell(item['quantity']?.toString() ?? '0'),
-                      _buildPdfCell('Rs ${(item['price'] ?? 0).toStringAsFixed(2)}'),
-                      _buildPdfCell('Rs ${(item['total'] ?? 0).toStringAsFixed(2)}'),
-                    ],
-                  );
-                }).toList(),
-              ],
-            ),
-          );
-        } else {
-          pdfContent.add(
-            pw.Container(
-              padding: pw.EdgeInsets.all(15),
-              child: pw.Text(
-                'Loading invoice items...',
-                style: pw.TextStyle(fontStyle: pw.FontStyle.italic, color: PdfColors.grey600),
-              ),
-            ),
-          );
-        }
-      }
-    }
-
-    pdfContent.add(pw.SizedBox(height: 20));
-    pdfContent.add(pw.Divider());
-    pdfContent.add(pw.Spacer());
-
-    // Footer
-    pdfContent.add(
-      pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Image(footerLogo, width: 30, height: 30),
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              pw.Text(
-                'Developed By: Umair Arshad',
-                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.Text(
-                'Contact: 0307-6455926',
-                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) => pdfContent,
-      ),
-    );
-
-    final pdfBytes = await pdf.save();
-
-    // Rest of the sharing/printing logic remains the same
-    if (kIsWeb) {
-      if (shouldShare) {
-        try {
-          final blob = html.Blob([pdfBytes], 'application/pdf');
-          final file = html.File([blob], 'filled_ledger_report.pdf', {'type': 'application/pdf'});
-          if (html.window.navigator is html.Navigator &&
-              (html.window.navigator as dynamic).canShare != null &&
-              (html.window.navigator as dynamic).canShare({'files': [file]})) {
-            await (html.window.navigator as dynamic).share({
-              'title': 'Filled Ledger Report',
-              'text': 'Filled Ledger Report for ${widget.customerName}',
-              'files': [file],
-            });
-            return;
-          }
-        } catch (e) {
-          print('Web share failed: $e');
-        }
-        _downloadPdfWeb(pdfBytes);
       } else {
-        try {
-          await Printing.layoutPdf(
-            onLayout: (PdfPageFormat format) async => pdfBytes,
-            usePrinterSettings: false,
-          );
-        } catch (e) {
-          print('Web printing failed: $e');
-          _downloadPdfWeb(pdfBytes);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Printing not supported, PDF downloaded instead')),
-          );
-        }
+        // Mobile/Desktop platform - use printing package
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) async => pdf.save(),
+          name: 'customer_ledger_${widget.customerName}_${DateFormat('ddMMyyyy').format(DateTime.now())}.pdf',
+        );
       }
-    } else {
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/filled_ledger_report.pdf');
-      await file.writeAsBytes(pdfBytes);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error printing PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
-      if (shouldShare) {
+  Future<void> _sharePDF(pw.Document pdf) async {
+    try {
+      final bytes = await pdf.save();
+      final fileName = 'customer_ledger_${widget.customerName}_${DateFormat('ddMMyyyy').format(DateTime.now())}.pdf';
+
+      if (kIsWeb) {
+        // For web, download the file
+        final blob = html.Blob([bytes], 'application/pdf');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.document.createElement('a') as html.AnchorElement
+          ..href = url
+          ..style.display = 'none'
+          ..download = fileName;
+        html.document.body?.children.add(anchor);
+        anchor.click();
+        html.document.body?.children.remove(anchor);
+        html.Url.revokeObjectUrl(url);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF downloaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // For mobile/desktop, save to temporary directory and share
+        final directory = await getTemporaryDirectory();
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(bytes);
+
         await Share.shareXFiles(
           [XFile(file.path)],
-          text: 'Filled Ledger Report for ${widget.customerName}',
-          subject: 'Filled Ledger Report',
+          text: 'Customer Ledger Report for ${widget.customerName}',
+          subject: 'Customer Ledger Report',
         );
-      } else {
-        await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdfBytes);
       }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error sharing PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  pw.Widget _buildPdfHeaderCell(String text) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(6),
-      decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-      child: pw.Text(
-        text,
-        style:  pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-      ),
-    );
-  }
-
-  pw.Widget _buildPdfCell(String text, {bool isHeader = false}) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
-          fontSize: 9,
-        ),
-      ),
-    );
-  }
-
-  void _downloadPdfWeb(Uint8List bytes) {
-    final blob = html.Blob([bytes], 'application/pdf');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.document.createElement('a') as html.AnchorElement
-      ..href = url
-      ..style.display = 'none'
-      ..download = 'filled_ledger_report_${widget.customerName}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
-
-    html.document.body?.children.add(anchor);
-    anchor.click();
-    html.document.body?.children.remove(anchor);
-    html.Url.revokeObjectUrl(url);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('PDF downloaded successfully')),
-    );
-  }
 
   Widget _buildCustomerInfo(BuildContext context, LanguageProvider languageProvider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
@@ -949,7 +937,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-// Updated transaction table with better row structure
+  // Replace your _buildTransactionTable method with this:
   Widget _buildTransactionTable(LanguageProvider languageProvider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
@@ -991,148 +979,237 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 ),
               ),
 
-            // Main Transaction Table
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: MaterialStateProperty.all(Color(0xFFFFB74D).withOpacity(0.2)),
-                headingTextStyle: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFE65100),
-                ),
-                columns: [
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Date' : 'ڈیٹ')),
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Details' : 'تفصیلات')),
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Type' : 'قسم')),
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ')),
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Bank' : 'بینک')),
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
-                  DataColumn(label: Text(languageProvider.isEnglish ? 'Balance' : 'بیلنس')),
-                ],
-                rows: _buildDataRows(transactions, reportProvider, isMobile, languageProvider),
-              ),
-            ),
-
-            // Expanded invoice items displayed outside the DataTable
-            ...transactions.where((transaction) {
-              final isInvoice = (transaction['credit'] ?? 0) != 0;
-              final transactionKey = transaction['key']?.toString() ?? '';
-              final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);
-              return isInvoice && isExpanded;
-            }).map((transaction) {
-              final transactionKey = transaction['key']?.toString() ?? '';
-              final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
-              return _buildInvoiceItems(transactionKey, reportProvider, date);
-            }).toList(),
+            // Custom Table with inline invoice items
+            _buildCustomTransactionTable(transactions, reportProvider, isMobile, languageProvider),
           ],
         );
       },
     );
   }
 
-// Helper method to build data rows without nested DataTables
-  List<DataRow> _buildDataRows(
+// New method to build custom table with inline invoice items
+  Widget _buildCustomTransactionTable(
       List<Map<String, dynamic>> transactions,
       FilledCustomerReportProvider reportProvider,
       bool isMobile,
       LanguageProvider languageProvider,
       ) {
-    return transactions.map((transaction) {
-      final bankName = _getBankName(transaction);
-      final bankLogoPath = _getBankLogoPath(bankName);
-      final isInvoice = (transaction['credit'] ?? 0) != 0;
-      final transactionKey = transaction['key']?.toString() ?? '';
-      final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);
-
-      final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
-      final details = transaction['details']?.toString() ??
-          transaction['referenceNumber']?.toString() ??
-          transaction['filledNumber']?.toString() ??
-          '-';
-      final paymentMethod = transaction['paymentMethod']?.toString() ?? '-';
-      final debit = transaction['debit']?.toStringAsFixed(2) ?? '0.00';
-      final credit = transaction['credit']?.toStringAsFixed(2) ?? '0.00';
-      final balance = transaction['balance']?.toStringAsFixed(2) ?? '0.00';
-
-      return DataRow(
-        onSelectChanged: isInvoice ? (_) {
-          reportProvider.toggleTransactionExpansion(transactionKey);
-        } : null,
-        color: isInvoice && isExpanded
-            ? MaterialStateProperty.all(Color(0xFFFFB74D).withOpacity(0.1))
-            : null,
-        cells: [
-          DataCell(Text(
-            DateFormat('dd MMM yyyy').format(date),
-            style: TextStyle(fontSize: isMobile ? 10 : 12),
-          )),
-          DataCell(Text(
-            details,
-            style: TextStyle(fontSize: isMobile ? 10 : 12),
-          )),
-          DataCell(Row(
-            children: [
-              Text(
-                isInvoice ? 'Invoice' : 'Payment',
-                style: TextStyle(fontSize: isMobile ? 10 : 12),
-              ),
-              if (isInvoice) ...[
-                SizedBox(width: 4),
-                Icon(
-                  isExpanded ? Icons.expand_less : Icons.expand_more,
-                  size: 16,
-                ),
-              ],
-            ],
-          )),
-          DataCell(Text(
-            _getPaymentMethodText(paymentMethod, languageProvider),
-            style: TextStyle(fontSize: isMobile ? 10 : 12),
-          )),
-          DataCell(
-            Row(
-              mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Table Header
+        Container(
+          decoration: BoxDecoration(
+            color: Color(0xFFFFB74D).withOpacity(0.2),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                if (bankLogoPath != null) ...[
-                  Image.asset(bankLogoPath, width: 30, height: 30),
-                  SizedBox(width: 8),
-                ],
-                Flexible(
-                  child: Text(
-                    bankName ?? '-',
-                    style: TextStyle(fontSize: isMobile ? 10 : 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Date' : 'ڈیٹ', 120),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Details' : 'تفصیلات', 120),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Type' : 'قسم', 100),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ', 120),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Bank' : 'بینک', 150),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ', 100),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ', 100),
+                _buildHeaderCell(languageProvider.isEnglish ? 'Balance' : 'بیلنس', 100),
               ],
             ),
           ),
-          DataCell(Text(
-            (transaction['debit'] ?? 0) > 0 ? 'Rs $debit' : '-',
-            style: TextStyle(
-              fontSize: isMobile ? 10 : 12,
-              color: (transaction['debit'] ?? 0) > 0 ? Colors.red : Colors.grey,
-            ),
-          )),
-          DataCell(Text(
-            (transaction['credit'] ?? 0) > 0 ? 'Rs $credit' : '-',
-            style: TextStyle(
-              fontSize: isMobile ? 10 : 12,
-              color: (transaction['credit'] ?? 0) > 0 ? Colors.green : Colors.grey,
-            ),
-          )),
-          DataCell(Text(
-            'Rs $balance',
-            style: TextStyle(
-              fontSize: isMobile ? 10 : 12,
-              fontWeight: FontWeight.bold,
-            ),
-          )),
-        ],
-      );
-    }).toList();
+        ),
+
+        // Table Rows with inline invoice items
+        ...transactions.expand((transaction) {
+          List<Widget> rowWidgets = [];
+
+          // Add the main transaction row
+          rowWidgets.add(_buildTransactionRow(transaction, reportProvider, isMobile, languageProvider));
+
+          // Add invoice items right after this row if it's expanded
+          final isInvoice = (transaction['credit'] ?? 0) != 0;
+          final transactionKey = transaction['key']?.toString() ?? '';
+          final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);
+
+          if (isInvoice && isExpanded) {
+            final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
+            rowWidgets.add(_buildInvoiceItems(transactionKey, reportProvider, date));
+          }
+
+          return rowWidgets;
+        }).toList(),
+      ],
+    );
   }
+
+  Widget _buildHeaderCell(String text, double width) {
+    return Container(
+      width: width,
+      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        border: Border(right: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Color(0xFFE65100),
+          fontSize: 12,
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  Widget _buildTransactionRow(
+      Map<String, dynamic> transaction,
+      FilledCustomerReportProvider reportProvider,
+      bool isMobile,
+      LanguageProvider languageProvider,
+      )
+  {
+    final bankName = _getBankName(transaction);
+    final bankLogoPath = _getBankLogoPath(bankName);
+    final isInvoice = (transaction['credit'] ?? 0) != 0;
+    final transactionKey = transaction['key']?.toString() ?? '';
+    final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);
+
+    final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
+    final details = transaction['details']?.toString() ??
+        transaction['referenceNumber']?.toString() ??
+        transaction['filledNumber']?.toString() ??
+        '-';
+    final paymentMethod = transaction['paymentMethod']?.toString() ?? '-';
+    final debit = transaction['debit']?.toStringAsFixed(2) ?? '0.00';
+    final credit = transaction['credit']?.toStringAsFixed(2) ?? '0.00';
+    final balance = transaction['balance']?.toStringAsFixed(2) ?? '0.00';
+
+    return GestureDetector(
+      onTap: isInvoice ? () {
+        reportProvider.toggleTransactionExpansion(transactionKey);
+      } : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isInvoice && isExpanded
+              ? Color(0xFFFFB74D).withOpacity(0.1)
+              : Colors.white,
+          border: Border(
+            bottom: BorderSide(color: Colors.grey[300]!),
+            left: BorderSide(color: Colors.grey[300]!),
+            right: BorderSide(color: Colors.grey[300]!),
+          ),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildDataCell(
+                DateFormat('dd MMM yyyy').format(date),
+                120,
+                isMobile,
+              ),
+              _buildDataCell(details, 120, isMobile),
+              _buildDataCell(
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isInvoice ? 'Invoice' : 'Payment',
+                      style: TextStyle(fontSize: isMobile ? 10 : 12),
+                    ),
+                    if (isInvoice) ...[
+                      SizedBox(width: 4),
+                      Icon(
+                        isExpanded ? Icons.expand_less : Icons.expand_more,
+                        size: 16,
+                        color: Color(0xFFE65100),
+                      ),
+                    ],
+                  ],
+                ),
+                100,
+                isMobile,
+              ),
+              _buildDataCell(
+                _getPaymentMethodText(paymentMethod, languageProvider),
+                120,
+                isMobile,
+              ),
+              _buildDataCell(
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (bankLogoPath != null) ...[
+                      Image.asset(bankLogoPath, width: 24, height: 24),
+                      SizedBox(width: 4),
+                    ],
+                    Flexible(
+                      child: Text(
+                        bankName ?? '-',
+                        style: TextStyle(fontSize: isMobile ? 10 : 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                150,
+                isMobile,
+              ),
+              _buildDataCell(
+                (transaction['debit'] ?? 0) > 0 ? 'Rs $debit' : '-',
+                100,
+                isMobile,
+                textColor: (transaction['debit'] ?? 0) > 0 ? Colors.red : Colors.grey,
+              ),
+              _buildDataCell(
+                (transaction['credit'] ?? 0) > 0 ? 'Rs $credit' : '-',
+                100,
+                isMobile,
+                textColor: (transaction['credit'] ?? 0) > 0 ? Colors.green : Colors.grey,
+              ),
+              _buildDataCell(
+                'Rs $balance',
+                100,
+                isMobile,
+                fontWeight: FontWeight.bold,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDataCell(
+      dynamic content,
+      double width,
+      bool isMobile, {
+        Color? textColor,
+        FontWeight? fontWeight,
+      }) {
+    return Container(
+      width: width,
+      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        border: Border(right: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: content is Widget
+          ? content
+          : Text(
+        content.toString(),
+        style: TextStyle(
+          fontSize: isMobile ? 10 : 12,
+          color: textColor ?? Colors.black87,
+          fontWeight: fontWeight,
+        ),
+        textAlign: TextAlign.center,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+
 
   String _getPaymentMethodText(String? method, LanguageProvider languageProvider) {
     if (method == null) return '-';
