@@ -396,8 +396,8 @@ class _ItemsListPageState extends State<ItemsListPage> {
       appBar: AppBar(
         title: Text('Inventory Information'),
         actions: [
-          IconButton(icon: Icon(Icons.picture_as_pdf), onPressed: _createPDFAndSave),
-          IconButton(icon: Icon(Icons.share), onPressed: _sharePDF),
+          IconButton(icon: Icon(Icons.picture_as_pdf, color: Colors.white), onPressed: _createPDFAndSave),
+          IconButton(icon: Icon(Icons.share, color: Colors.white), onPressed: _sharePDF),
           IconButton(
             onPressed: () {
               Navigator.push(

@@ -320,7 +320,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               ...transactions.map((transaction) {
                 final bankName = _getBankName(transaction);
                 final bankLogo = bankName != null ? bankLogoImages[bankName.toLowerCase()] : null;
-
                 return pw.TableRow(
                   children: [
                     _buildPdfCell(DateFormat('dd MMM yyyy, hh:mm a')
@@ -598,83 +597,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-  // Widget _buildTransactionTable(List<Map<String, dynamic>> transactions, LanguageProvider languageProvider) {
-  //   final isMobile = MediaQuery.of(context).size.width < 600;
-  //   final reportProvider = Provider.of<CustomerReportProvider>(context, listen: false);
-  //
-  //   return SingleChildScrollView(
-  //     scrollDirection: Axis.horizontal,
-  //     child: DataTable(
-  //       headingRowColor: MaterialStateProperty.all(Color(0xFFFFB74D).withOpacity(0.2)),
-  //       headingTextStyle: TextStyle(
-  //         fontWeight: FontWeight.bold,
-  //         color: Color(0xFFE65100), // Dark orange
-  //       ),
-  //       columns: [
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Date' : 'ڈیٹ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Invoice Number' : 'انوائس نمبر')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Type' : 'قسم')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Bank' : 'بینک')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Balance' : 'بیلنس')),
-  //       ],
-  //       rows: transactions.map((transaction) {
-  //         final bankName = _getBankName(transaction);
-  //         final bankLogoPath = _getBankLogoPath(bankName);
-  //
-  //         return DataRow(
-  //           cells: [
-  //             DataCell(Text(
-  //                 DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])),
-  //                 style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //             )),
-  //             DataCell(Text(
-  //                 transaction['referenceNumber'] ?? transaction['filledNumber'] ?? '-',
-  //                 style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //             )),
-  //             DataCell(Text(
-  //                 transaction['credit'] < 0.0 ? 'Filled (Edited)' :
-  //                 (transaction['credit'] != 0.0 ? 'ٰInvoice' : 'Bill'),
-  //                 style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //             )),
-  //             DataCell(Text(
-  //               _getPaymentMethodText(transaction['paymentMethod'], languageProvider),
-  //               style: TextStyle(fontSize: isMobile ? 10 : 12),
-  //             )),
-  //             DataCell(
-  //               Row(
-  //                 mainAxisSize: MainAxisSize.min,
-  //                 children: [
-  //                   if (bankLogoPath != null)
-  //                     Image.asset(bankLogoPath, width: 50, height: 50),
-  //                   if (bankLogoPath != null)
-  //                     const SizedBox(width: 8),
-  //                   Text(bankName ?? '-', style: TextStyle(fontSize: isMobile ? 10 : 12)),
-  //                 ],
-  //               ),
-  //             ),
-  //             DataCell(Text(
-  //                 'Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}',
-  //                 style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //             )),
-  //             DataCell(Text(
-  //                 'Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}',
-  //                 style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //             )),
-  //             DataCell(Text(
-  //                 'Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}',
-  //                 style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //             )),
-  //           ],
-  //         );
-  //       }).toList(),
-  //     ),
-  //   );
-  // }
-
-
   Widget _buildTransactionTable(
       LanguageProvider languageProvider,
       )
@@ -767,7 +689,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       style: TextStyle(fontSize: isMobile ? 10 : 12),
                     )),
                     DataCell(Text(
-                      transaction['credit'] != 0.0 ? 'Filled' : 'Bill',
+                      transaction['credit'] != 0.0 ? 'Invoice' : 'Payment',
                       style: TextStyle(fontSize: isMobile ? 10 : 12),
                     )),
                     DataCell(Text(
@@ -819,9 +741,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       },
     );
   }
-
-
-
 
   String _getPaymentMethodText(String? method, LanguageProvider languageProvider) {
     if (method == null) return '-';

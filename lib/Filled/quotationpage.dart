@@ -605,6 +605,15 @@ class _QuotationPageState extends State<QuotationPage> {
   }
 
   Widget _buildItemsGallery(BuildContext context, LanguageProvider languageProvider) {
+    // Filter items to show only those with customer-specific prices
+    List<Item> filteredItems = _selectedCustomerId == null
+        ? []
+        : _items.where((item) {
+      // Safely check if customerBasePrices exists and contains the key
+      return item.customerBasePrices != null &&
+          item.customerBasePrices!.containsKey(_selectedCustomerId);
+    }).toList();
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -618,7 +627,7 @@ class _QuotationPageState extends State<QuotationPage> {
                 Icon(Icons.image_search, color: Colors.pink[700], size: 24),
                 SizedBox(width: 8),
                 Text(
-                  languageProvider.isEnglish ? 'Items Gallery' : 'آئٹمز کی گیلری',
+                  languageProvider.isEnglish ? 'Customer Items' : 'کسٹمر کے آئٹمز',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -628,93 +637,128 @@ class _QuotationPageState extends State<QuotationPage> {
               ],
             ),
             SizedBox(height: 16),
-            // Remove Expanded and use SizedBox with fixed height
-            SizedBox(
-              height: 400, // Fixed height to avoid unbounded constraints
-              child: ListView.builder(
-                shrinkWrap: true,
-                physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  final displayPrice = _selectedCustomerId != null
-                      ? item.getPriceForCustomer(_selectedCustomerId)
-                      : item.salePrice;
-
+            Builder(
+              builder: (context) {
+                if (_selectedCustomerId == null) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => _addItemToQuotation(item),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Row(
-                            children: [
-                              // Item Image
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  color: Colors.grey[200],
-                                ),
-                                child: item.imageBase64 != null && item.imageBase64!.isNotEmpty
-                                    ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.memory(
-                                    base64Decode(item.imageBase64!),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Center(child: Icon(Icons.broken_image));
-                                    },
-                                  ),
-                                )
-                                    : Center(
-                                  child: Icon(
-                                    Icons.inventory,
-                                    size: 40,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.itemName,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      '${displayPrice.toStringAsFixed(2)} rs',
-                                      style: TextStyle(
-                                        color: Colors.green[700],
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: Text(
+                      languageProvider.isEnglish
+                          ? 'Please select a customer to view their items'
+                          : 'کسٹمر کے آئٹمز دیکھنے کے لیے ایک کسٹمر منتخب کریں',
+                      style: TextStyle(color: Colors.grey[600]),
                     ),
                   );
-                },
-              ),
+                }
+
+                if (filteredItems.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: Text(
+                      languageProvider.isEnglish
+                          ? 'No customer-specific items found'
+                          : 'کسٹمر کے لیے کوئی مخصوص آئٹمز نہیں ملے',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  );
+                }
+
+                return SizedBox(
+                  height: 400,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: filteredItems.length,
+                    itemBuilder: (context, index) {
+                      final item = filteredItems[index];
+                      final displayPrice = item.getPriceForCustomer(_selectedCustomerId);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => _addItemToQuotation(item),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Row(
+                                children: [
+                                  // Item Image
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      color: Colors.grey[200],
+                                    ),
+                                    child: item.imageBase64 != null && item.imageBase64!.isNotEmpty
+                                        ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.memory(
+                                        base64Decode(item.imageBase64!),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Center(child: Icon(Icons.broken_image));
+                                        },
+                                      ),
+                                    )
+                                        : Center(
+                                      child: Icon(
+                                        Icons.inventory,
+                                        size: 40,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.itemName,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          '${displayPrice.toStringAsFixed(2)} rs',
+                                          style: TextStyle(
+                                            color: Colors.green[700],
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          languageProvider.isEnglish
+                                              ? 'Customer Price'
+                                              : 'کسٹمر کی قیمت',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.blue[700],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
           ],
         ),

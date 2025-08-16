@@ -33,7 +33,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
   late TextEditingController _costPriceController;
   late TextEditingController _salePriceController;
   late TextEditingController _qtyOnHandController;
-  late TextEditingController _weightPerBagController;
   final TextEditingController _vendorsearchController = TextEditingController();
   final TextEditingController _unitSearchController = TextEditingController();
   final TextEditingController _categorySearchController = TextEditingController();
@@ -41,12 +40,10 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
   final TextEditingController _bomItemSearchController = TextEditingController();
 
   // Dropdown values
-  String? _selectedUnit;
   String? _selectedVendor;
   String? _selectedCategory;
 
   // Lists for dropdowns
-  List<String> _units = ['Kg', 'Pcs', 'Bag'];
   List<String> _vendors = [];
   List<String> _categories = [];
   List<Map<String, dynamic>> _customers = [];
@@ -77,19 +74,11 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
   void initState() {
     super.initState();
 
-
-
     _itemNameController = TextEditingController(text: widget.itemData?['itemName'] ?? '');
     _costPriceController = TextEditingController(text: widget.itemData?['costPrice']?.toString() ?? '');
     _salePriceController = TextEditingController(text: widget.itemData?['salePrice']?.toString() ?? '');
     _qtyOnHandController = TextEditingController(text: widget.itemData?['qtyOnHand']?.toString() ?? '');
-    _weightPerBagController = TextEditingController(text: widget.itemData?['weightPerBag']?.toString() ?? '');
 
-    // Add listeners for price per kg calculation
-    _salePriceController.addListener(_calculatePricePerKg);
-    _weightPerBagController.addListener(_calculatePricePerKg);
-
-    _selectedUnit = widget.itemData?['unit'];
     _selectedVendor = widget.itemData?['vendor'];
     _selectedCategory = widget.itemData?['category'];
 
@@ -145,7 +134,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
             return {
               'id': entry.key,
               'name': entry.value['itemName'] as String,
-              'unit': entry.value['unit'] ?? '',
+              'unit': 'Pcs', // Force unit to be Pcs
               'price': entry.value['salePrice'] ?? 0.0,
             };
           }).toList();
@@ -305,18 +294,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
   Future<void> fetchDropdownData() async {
     final DatabaseReference database = FirebaseDatabase.instance.ref();
 
-    // Fetch units
-    database.child('units').onValue.listen((event) {
-      final Map? data = event.snapshot.value as Map?;
-      if (data != null) {
-        setState(() {
-          _units = data.values
-              .map<String>((value) => (value as Map)['name']?.toString() ?? '')
-              .toList();
-        });
-      }
-    });
-
     // Fetch vendors
     setState(() => _isLoadingVendors = true);
     try {
@@ -398,7 +375,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
       _bomComponents.add({
         'id': item['id'],
         'name': item['name'],
-        'unit': item['unit'],
+        'unit': 'Pcs', // Force unit to be Pcs
         'quantity': quantity,
         'price': item['price'],
       });
@@ -412,7 +389,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
       _bomComponents.removeAt(index);
     });
   }
-
 
   void _showAddCustomerPriceDialog(String customerId, String customerName) {
     TextEditingController priceController = TextEditingController();
@@ -505,8 +481,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
             TextButton(
               onPressed: () {
                 double? qty = double.tryParse(qtyController.text);
-                // if (qty != null && qty > 0) {
-                if (qty != null) {  // Removed the qty > 0 check to allow negatives
+                if (qty != null) {
                   _addBomComponent(item, qty);
                   Navigator.pop(context);
                 } else {
@@ -544,8 +519,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
       _costPriceController.clear();
       _salePriceController.clear();
       _qtyOnHandController.clear();
-      _weightPerBagController.clear();
-      _selectedUnit = null;
       _selectedVendor = null;
       _selectedCategory = null;
       _customerBasePrices.clear();
@@ -569,9 +542,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
       }
 
       final DatabaseReference database = FirebaseDatabase.instance.ref();
-      final double weightPerBag = double.tryParse(_weightPerBagController.text) ?? 1;
-      final double pricePerBag = double.tryParse(_salePriceController.text) ?? 0.0;
-      final double pricePerKg = pricePerBag / weightPerBag;
 
       // Calculate total cost for BOM
       double totalCost = 0.0;
@@ -583,14 +553,11 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
 
       Map<String, double> customerPrices = Map.from(_customerBasePrices);
 
-
       final newItem = {
         'itemName': itemName,
-        'unit': _selectedUnit,
+        'unit': 'Pcs', // Force unit to be Pcs
         'costPrice': _isBOM ? totalCost : (double.tryParse(_costPriceController.text) ?? 0.0),
-        'salePrice': pricePerBag,
-        'pricePerKg': pricePerKg,
-        'weightPerBag': weightPerBag,
+        'salePrice': double.tryParse(_salePriceController.text) ?? 0.0,
         'qtyOnHand': int.tryParse(_qtyOnHandController.text) ?? 0,
         'vendor': _selectedVendor,
         'category': _selectedCategory,
@@ -690,7 +657,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
           color: isDeduction ? Colors.red[50] : null,
           child: ListTile(
             title: Text(component['name']),
-            subtitle: Text('${component['quantity']} ${component['unit']}'),
+            subtitle: Text('${component['quantity']} Pcs'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -720,7 +687,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
         .fold(0.0, (sum, item) => sum + (item['price'] * item['quantity']));
     double deductions = _bomComponents.where((c) => c['quantity'] < 0)
         .fold(0.0, (sum, item) => sum + (item['price'] * item['quantity']).abs());
-
 
     return Scaffold(
       appBar: AppBar(
@@ -910,7 +876,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                                           final item = _filteredItems[index];
                                           return ListTile(
                                             title: Text(item['name']),
-                                            subtitle: Text('${item['price']} PKR/${item['unit']}'),
+                                            subtitle: Text('${item['price']} PKR/Pcs'),
                                             trailing: Icon(Icons.add, color: Colors.green),
                                             onTap: () => _showAddBomComponentDialog(item),
                                           );
@@ -968,31 +934,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                   ],
                   // Item-specific fields (shown when not in BOM mode)
                   if (!_isBOM) ...[
-                    DropdownButtonFormField<String>(
-                      value: _selectedUnit,
-                      decoration: InputDecoration(
-                        labelText: languageProvider.isEnglish ? 'Unit' : 'یونٹ',
-                        border: OutlineInputBorder(),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.orange),
-                        ),
-                      ),
-                      items: _units.map((unit) {
-                        return DropdownMenuItem(
-                          value: unit,
-                          child: Text(unit),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedUnit = value;
-                        });
-                      },
-                      validator: (value) => value == null
-                          ? (languageProvider.isEnglish ? 'Please select a unit' : 'براہ کرم ایک یونٹ منتخب کریں۔')
-                          : null,
-                    ),
-                    SizedBox(height: 16),
                     TextFormField(
                       controller: _costPriceController,
                       decoration: InputDecoration(
@@ -1011,7 +952,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                   TextFormField(
                     controller: _salePriceController,
                     decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Sale Price' : 'فروخت کی قیمت',
+                      labelText: languageProvider.isEnglish ? 'Sale Price (per Pcs)' : 'فروخت کی قیمت (فی پِیس)',
                       border: OutlineInputBorder(),
                       focusedBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.orange),
@@ -1028,45 +969,11 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                     },
                   ),
                   SizedBox(height: 16),
-                  TextFormField(
-                    controller: _weightPerBagController,
-                    decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish
-                          ? (_isBOM ? 'Package Weight (kg)' : 'Weight per Bag (kg)')
-                          : (_isBOM ? 'پیکیج وزن (کلوگرام)' : 'فی بیگ وزن (کلوگرام)'),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.orange),
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return languageProvider.isEnglish
-                            ? 'Enter weight'
-                            : 'وزن درج کریں';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: 16),
 
-                  Text(
-                    languageProvider.isEnglish
-                        ? 'Per KG Price: ${( (double.tryParse(_salePriceController.text) ?? 0) / (double.tryParse(_weightPerBagController.text) ?? 1) ).toStringAsFixed(2)} PKR'
-                        : 'فی کلو قیمت: ${( (double.tryParse(_salePriceController.text) ?? 0) / (double.tryParse(_weightPerBagController.text) ?? 1) ).toStringAsFixed(2)} روپے',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.orange[300],
-                    ),
-                  ),
-
-                  SizedBox(height: 16),
                   TextFormField(
                     controller: _qtyOnHandController,
                     decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Quantity on Hand' : 'موجود مقدار',
+                      labelText: languageProvider.isEnglish ? 'Quantity on Hand (Pcs)' : 'موجود مقدار (پِیس)',
                       border: OutlineInputBorder(),
                       focusedBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.orange),
@@ -1249,149 +1156,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                   ),
                   SizedBox(height: 20),
 
-                  // // Customer Base Prices Section (only for items)
-                  // if (!_isBOM) ...[
-                  //   Card(
-                  //     elevation: 4,
-                  //     shape: RoundedRectangleBorder(
-                  //       borderRadius: BorderRadius.circular(12),
-                  //     ),
-                  //     child: Padding(
-                  //       padding: const EdgeInsets.all(16.0),
-                  //       child: Column(
-                  //         crossAxisAlignment: CrossAxisAlignment.start,
-                  //         children: [
-                  //           Text(
-                  //             languageProvider.isEnglish
-                  //                 ? 'Customer Base Prices'
-                  //                 : 'کسٹمر کی بنیادی قیمتیں',
-                  //             style: TextStyle(
-                  //               fontSize: 18,
-                  //               fontWeight: FontWeight.bold,
-                  //             ),
-                  //           ),
-                  //           SizedBox(height: 10),
-                  //
-                  //           if (_isLoadingCustomers)
-                  //             Center(child: CircularProgressIndicator())
-                  //           else if (_customers.isNotEmpty)
-                  //             Column(
-                  //               children: [
-                  //                 TextField(
-                  //                   controller: _customerSearchController,
-                  //                   decoration: InputDecoration(
-                  //                     hintText: languageProvider.isEnglish
-                  //                         ? 'Search customers...'
-                  //                         : 'کسٹمرز تلاش کریں...',
-                  //                     border: OutlineInputBorder(
-                  //                       borderRadius: BorderRadius.circular(8),
-                  //                     ),
-                  //                     prefixIcon: Icon(Icons.search),
-                  //                   ),
-                  //                 ),
-                  //                 SizedBox(height: 10),
-                  //                 if (_customerSearchController.text.isNotEmpty)
-                  //                   Container(
-                  //                     height: 150,
-                  //                     decoration: BoxDecoration(
-                  //                       border: Border.all(color: Colors.grey),
-                  //                       borderRadius: BorderRadius.circular(8),
-                  //                     ),
-                  //                     child: ListView.builder(
-                  //                       itemCount: _filteredCustomers.length,
-                  //                       itemBuilder: (context, index) {
-                  //                         final customer = _filteredCustomers[index];
-                  //                         final isAlreadyAdded = _customerBasePrices.containsKey(customer['id']);
-                  //                         return ListTile(
-                  //                           title: Text(customer['name']),
-                  //                           subtitle: Text(customer['phone'] ?? ''),
-                  //                           trailing: isAlreadyAdded
-                  //                               ? Icon(Icons.check, color: Colors.green)
-                  //                               : Icon(Icons.add, color: Colors.orange[300]),
-                  //                           onTap: isAlreadyAdded
-                  //                               ? null
-                  //                               : () => _showAddCustomerPriceDialog(
-                  //                               customer['id'],
-                  //                               customer['name']
-                  //                           ),
-                  //                         );
-                  //                       },
-                  //                     ),
-                  //                   ),
-                  //               ],
-                  //             ),
-                  //
-                  //           SizedBox(height: 20),
-                  //
-                  //           if (_customerPricesList.isNotEmpty) ...[
-                  //             Text(
-                  //               languageProvider.isEnglish
-                  //                   ? 'Added Customer Prices:'
-                  //                   : 'شامل کردہ کسٹمر کی قیمتیں:',
-                  //               style: TextStyle(
-                  //                 fontSize: 16,
-                  //                 fontWeight: FontWeight.bold,
-                  //               ),
-                  //             ),
-                  //             SizedBox(height: 10),
-                  //             ListView.builder(
-                  //               shrinkWrap: true,
-                  //               physics: NeverScrollableScrollPhysics(),
-                  //               itemCount: _customerPricesList.length,
-                  //               itemBuilder: (context, index) {
-                  //                 final customerPrice = _customerPricesList[index];
-                  //                 return Card(
-                  //                   margin: EdgeInsets.symmetric(vertical: 4),
-                  //                   child: ListTile(
-                  //                     title: Text(customerPrice['customerName']),
-                  //                     subtitle: Text(
-                  //                         '${languageProvider.isEnglish ? 'Price: ' : 'قیمت: '}${customerPrice['price'].toStringAsFixed(2)}rs'),
-                  //                     trailing: IconButton(
-                  //                       icon: Icon(Icons.delete, color: Colors.red),
-                  //                       onPressed: () => _removeCustomerPrice(customerPrice['customerId']),
-                  //                     ),
-                  //                   ),
-                  //                 );
-                  //               },
-                  //             ),
-                  //           ] else if (_customerBasePrices.isNotEmpty && _customers.isEmpty)
-                  //             Center(
-                  //               child: Text(
-                  //                 languageProvider.isEnglish
-                  //                     ? 'Loading customer information...'
-                  //                     : 'کسٹمر کی معلومات لوڈ ہو رہی ہیں...',
-                  //                 style: TextStyle(color: Colors.grey[600]),
-                  //               ),
-                  //             ),
-                  //         ],
-                  //       ),
-                  //     ),
-                  //   ),
-                  //   SizedBox(height: 20),
-                  // ],
-                  // // Customer wise prices for BOM
-                  // if (_isBOM && _customerPricesList.isNotEmpty) ...[
-                  //   Column(
-                  //     crossAxisAlignment: CrossAxisAlignment.start,
-                  //     children: [
-                  //       Text(
-                  //         'Customer Prices for this BOM:',
-                  //         style: TextStyle(fontWeight: FontWeight.bold),
-                  //       ),
-                  //       SizedBox(height: 8),
-                  //       ..._customerPricesList.map((customerPrice) =>
-                  //           ListTile(
-                  //             title: Text(customerPrice['customerName']),
-                  //             subtitle: Text('Price: ${customerPrice['price'].toStringAsFixed(2)} PKR'),
-                  //           )
-                  //       ).toList(),
-                  //     ],
-                  //   ),
-                  // ],
-
-                  // Save button
-
-                  // Customer Base Prices Section (for both items and BOM)
+                  // Customer Specific Prices Section
                   Card(
                     elevation: 4,
                     shape: RoundedRectangleBorder(
@@ -1569,30 +1334,12 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
     _costPriceController.dispose();
     _salePriceController.dispose();
     _qtyOnHandController.dispose();
-    _weightPerBagController.dispose();
     _vendorsearchController.dispose();
     _unitSearchController.dispose();
     _categorySearchController.dispose();
     _customerSearchController.dispose();
     _bomItemSearchController.dispose();
     _componentQtyController.dispose();
-    _salePriceController.removeListener(_calculatePricePerKg);
-    _weightPerBagController.removeListener(_calculatePricePerKg);
     super.dispose();
   }
-
-  void _calculatePricePerKg() {
-    final salePrice = double.tryParse(_salePriceController.text) ?? 0;
-    final weight = double.tryParse(_weightPerBagController.text) ?? 1;
-
-    // Avoid division by zero
-    final pricePerKg = weight > 0 ? salePrice / weight : 0;
-
-    // Update the UI by calling setState
-    setState(() {
-      // The price per kg is already displayed in the UI through the Text widget
-      // so we just need to trigger a rebuild
-    });
-  }
-
 }

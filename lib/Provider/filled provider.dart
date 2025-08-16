@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -183,7 +184,19 @@ class FilledProvider with ChangeNotifier {
       if (filledId.isEmpty || filledNumber.isEmpty) {
         throw Exception('Filled ID and number cannot be empty');
       }
-      final cleanedItems = items.map((item) {
+      // final cleanedItems = items.map((item) {
+      //   return {
+      //     'itemName': item['itemName'],
+      //     'rate': item['rate'] ?? 0.0,
+      //     'qty': item['qty'] ?? 0.0,
+      //     'description': item['description'] ?? '',
+      //     'total': item['total'],
+      //   };
+      // }).toList();
+      // Filter out empty rows (where itemName is empty)
+      final cleanedItems = items.where((item) =>
+      (item['itemName'] as String).isNotEmpty
+      ).map((item) {
         return {
           'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
@@ -269,17 +282,28 @@ class FilledProvider with ChangeNotifier {
       // Calculate the difference between the old and new grand totals
       final double difference = grandTotal - oldGrandTotal;
 
-      final cleanedItems = items.map((item) {
+      // final cleanedItems = items.map((item) {
+      //   return {
+      //     'itemName': item['itemName'],
+      //     'rate': item['rate'] ?? 0.0,
+      //     'qty': item['qty'] ?? 0.0,
+      //     'description': item['description'] ?? '',
+      //     'total': item['total'],
+      //
+      //   };
+      // }).toList();
+// Filter out empty rows
+      final cleanedItems = items.where((item) =>
+      (item['itemName'] as String).isNotEmpty
+      ).map((item) {
         return {
           'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           'description': item['description'] ?? '',
           'total': item['total'],
-
         };
       }).toList();
-
       // Prepare the updated filled data
       final filledData = {
         'referenceNumber': referenceNumber, // Add this

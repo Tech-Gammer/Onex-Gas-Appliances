@@ -1589,81 +1589,6 @@ class _filledpageState extends State<filledpage> {
     return pw.MemoryImage(buffer);
   }
 
-
-  //
-  // @override
-  // void initState() {
-  //   super.initState();
-  //
-  //   _fetchItems();
-  //
-  //   // Initialize _currentFilled with passed data or default structure
-  //   _currentFilled = widget.filled ?? {
-  //     'filledNumber': null,
-  //     'customerId': '',
-  //     'customerName': '',
-  //     'referenceNumber': '',
-  //     'items': [],
-  //     'subtotal': 0.0,
-  //     'discount': 0.0,
-  //     'grandTotal': 0.0,
-  //     'mazdoori': 0.0,
-  //     'paymentType': 'udhaar',
-  //     'paymentMethod': null,
-  //     'isFromQuotation': false,
-  //     'createdAt': DateTime.now().toIso8601String(),
-  //   };
-  //
-  //   _filledId = _currentFilled!['filledNumber']?.toString() ?? '';
-  //   _isReadOnly = widget.filled != null && widget.filled!['filledNumber'] != null;
-  //
-  //   // Initialize date controller
-  //   if (widget.filled != null && widget.filled!['createdAt'] != null) {
-  //     // Parse the existing date
-  //     DateTime filledDate = DateTime.parse(widget.filled!['createdAt']);
-  //     _dateController.text = DateFormat('yyyy-MM-dd').format(filledDate);
-  //   } else {
-  //     // Set to current date for new invoices
-  //     _dateController.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
-  //   }
-  //
-  //   // Safe controller initialization
-  //   _mazdooriController.text =
-  //       (_currentFilled!['mazdoori'] as num?)?.toStringAsFixed(2) ?? '0.00';
-  //
-  //   _discountController.text =
-  //       (_currentFilled!['discount'] as num?)?.toStringAsFixed(2) ?? '0.00';
-  //
-  //   _referenceController.text = _currentFilled!['referenceNumber']?.toString() ?? '';
-  //
-  //   // Payment type handling
-  //   _paymentType = _currentFilled!['paymentType']?.toString() ?? 'instant';
-  //   _instantPaymentMethod = _currentFilled!['paymentMethod']?.toString();
-  //
-  //   // Initialize customer provider with null checks
-  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-  //   customerProvider.fetchCustomers().then((_) {
-  //     final customerId = _currentFilled!['customerId']?.toString();
-  //
-  //     if (customerId != null && customerId.isNotEmpty) {
-  //       final customer = customerProvider.customers.firstWhere(
-  //             (c) => c.id == customerId,
-  //         orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '',city: ''),
-  //       );
-  //
-  //       setState(() {
-  //         _selectedCustomerId = customer.id;
-  //         _selectedCustomerName = customer.name;
-  //       });
-  //
-  //       _fetchRemainingBalance();
-  //     }
-  //   });
-  //
-  //   // Initialize rows safely
-  //   _initializeRows();
-  // }
-
   @override
   void initState() {
     super.initState();
@@ -1755,8 +1680,6 @@ class _filledpageState extends State<filledpage> {
     _initializeRows();
   }
 
-
-
   void _initializeRows() {
     final items = _currentFilled!['items'] as List?;
 
@@ -1824,7 +1747,6 @@ class _filledpageState extends State<filledpage> {
     super.dispose();
   }
 
-
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -1853,6 +1775,15 @@ class _filledpageState extends State<filledpage> {
   }
 
   Widget _buildItemsGallery(BuildContext context, LanguageProvider languageProvider) {
+    // Filter items to show only those with customer-specific prices
+    List<Item> filteredItems = _selectedCustomerId == null
+        ? []
+        : _items.where((item) {
+      // Safely check if customerBasePrices exists and contains the key
+      return item.customerBasePrices != null &&
+          item.customerBasePrices!.containsKey(_selectedCustomerId);
+    }).toList();
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1866,7 +1797,7 @@ class _filledpageState extends State<filledpage> {
                 Icon(Icons.image_search, color: Colors.pink[700], size: 24),
                 SizedBox(width: 8),
                 Text(
-                  languageProvider.isEnglish ? 'Items Gallery' : 'آئٹمز کی گیلری',
+                  languageProvider.isEnglish ? 'Customer Items' : 'کسٹمر کے آئٹمز',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -1876,92 +1807,128 @@ class _filledpageState extends State<filledpage> {
               ],
             ),
             SizedBox(height: 16),
-            SizedBox(
-              height: 400, // Fixed height to avoid unbounded constraints
-              child: ListView.builder(
-                shrinkWrap: true,
-                physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  final displayPrice = _selectedCustomerId != null
-                      ? item.getPriceForCustomer(_selectedCustomerId)
-                      : item.salePrice;
-
+            Builder(
+              builder: (context) {
+                if (_selectedCustomerId == null) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => _addItemToFilled(item),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Row(
-                            children: [
-                              // Item Image
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  color: Colors.grey[200],
-                                ),
-                                child: item.imageBase64 != null && item.imageBase64!.isNotEmpty
-                                    ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.memory(
-                                    base64Decode(item.imageBase64!),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Center(child: Icon(Icons.broken_image));
-                                    },
-                                  ),
-                                )
-                                    : Center(
-                                  child: Icon(
-                                    Icons.inventory,
-                                    size: 40,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.itemName,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      '${displayPrice.toStringAsFixed(2)} rs',
-                                      style: TextStyle(
-                                        color: Colors.green[700],
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: Text(
+                      languageProvider.isEnglish
+                          ? 'Please select a customer to view their items'
+                          : 'کسٹمر کے آئٹمز دیکھنے کے لیے ایک کسٹمر منتخب کریں',
+                      style: TextStyle(color: Colors.grey[600]),
                     ),
                   );
-                },
-              ),
+                }
+
+                if (filteredItems.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: Text(
+                      languageProvider.isEnglish
+                          ? 'No customer-specific items found'
+                          : 'کسٹمر کے لیے کوئی مخصوص آئٹمز نہیں ملے',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  );
+                }
+
+                return SizedBox(
+                  height: 400,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: filteredItems.length,
+                    itemBuilder: (context, index) {
+                      final item = filteredItems[index];
+                      final displayPrice = item.getPriceForCustomer(_selectedCustomerId);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => _addItemToFilled(item),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Row(
+                                children: [
+                                  // Item Image
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      color: Colors.grey[200],
+                                    ),
+                                    child: item.imageBase64 != null && item.imageBase64!.isNotEmpty
+                                        ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.memory(
+                                        base64Decode(item.imageBase64!),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Center(child: Icon(Icons.broken_image));
+                                        },
+                                      ),
+                                    )
+                                        : Center(
+                                      child: Icon(
+                                        Icons.inventory,
+                                        size: 40,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.itemName,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          '${displayPrice.toStringAsFixed(2)} rs',
+                                          style: TextStyle(
+                                            color: Colors.green[700],
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          languageProvider.isEnglish
+                                              ? 'Customer Price'
+                                              : 'کسٹمر کی قیمت',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.blue[700],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -2186,81 +2153,6 @@ class _filledpageState extends State<filledpage> {
       ),
     );
   }
-
-  // Widget _buildHeaderSection(BuildContext context, LanguageProvider languageProvider, {required bool isMobile}) {
-  //   return Card(
-  //     elevation: 2,
-  //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  //     child: Container(
-  //       padding: const EdgeInsets.all(20.0),
-  //       decoration: BoxDecoration(
-  //         borderRadius: BorderRadius.circular(12),
-  //         gradient: LinearGradient(
-  //           colors: [Colors.orange[50]!, Colors.amber[50]!],
-  //           begin: Alignment.topLeft,
-  //           end: Alignment.bottomRight,
-  //         ),
-  //       ),
-  //       child: Column(
-  //         children: [
-  //           Row(
-  //             children: [
-  //               Icon(Icons.receipt_long, color: Colors.orange[700], size: 24),
-  //               const SizedBox(width: 8),
-  //               Text(
-  //                 languageProvider.isEnglish ? 'Invoice Details' : 'انوائس کی تفصیلات',
-  //                 style: TextStyle(
-  //                   fontSize: 18,
-  //                   fontWeight: FontWeight.w600,
-  //                   color: Colors.orange[800],
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //           const SizedBox(height: 20),
-  //           if (isMobile) ...[
-  //             _buildTextField(
-  //               controller: _referenceController,
-  //               label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
-  //               icon: Icons.tag,
-  //             ),
-  //             const SizedBox(height: 16),
-  //             _buildTextField(
-  //               controller: _dateController,
-  //               label: languageProvider.isEnglish ? 'Date' : 'تاریخ',
-  //               icon: Icons.calendar_today,
-  //               readOnly: true,
-  //               onTap: () => _selectDate(context),
-  //             ),
-  //           ] else ...[
-  //             Row(
-  //               children: [
-  //                 Expanded(
-  //                   child: _buildTextField(
-  //                     controller: _referenceController,
-  //                     label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
-  //                     icon: Icons.tag,
-  //                   ),
-  //                 ),
-  //                 const SizedBox(width: 16),
-  //                 Expanded(
-  //                   child: _buildTextField(
-  //                     controller: _dateController,
-  //                     label: languageProvider.isEnglish ? 'Date' : 'تاریخ',
-  //                     icon: Icons.calendar_today,
-  //                     readOnly: true,
-  //                     onTap: () => _selectDate(context),
-  //                   ),
-  //                 ),
-  //               ],
-  //             ),
-  //           ],
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
-
 
   Widget _buildHeaderSection(BuildContext context, LanguageProvider languageProvider, {required bool isMobile}) {
     return Card(
@@ -3343,33 +3235,33 @@ class _filledpageState extends State<filledpage> {
             ),
           ),
         ),
-        if ((widget.filled != null || _currentFilled != null) && _selectedCustomerId != null)
-          Row(
-            children: [
-              IconButton(
-                icon:  Icon(Icons.payment, color: Colors.green[600]),
-                onPressed: () {
-                  if (widget.filled != null) {
-                    onPaymentPressed(widget.filled!);
-                  } else if (_currentFilled != null) {
-                    onPaymentPressed(_currentFilled!);
-                  }
-                },
-                tooltip: languageProvider.isEnglish ? 'Make Payment' : 'ادائیگی کریں',
-              ),
-              IconButton(
-                icon:  Icon(Icons.history, color: Colors.green[600]),
-                onPressed: () {
-                  if (widget.filled != null) {
-                    onViewPayments(widget.filled!);
-                  } else if (_currentFilled != null) {
-                    onViewPayments(_currentFilled!);
-                  }
-                },
-                tooltip: languageProvider.isEnglish ? 'View Payment History' : 'ادائیگی کی تاریخ دیکھیں',
-              ),
-            ],
-          ),
+        // if ((widget.filled != null || _currentFilled != null) && _selectedCustomerId != null)
+        //   Row(
+        //     children: [
+        //       IconButton(
+        //         icon:  Icon(Icons.payment, color: Colors.green[600]),
+        //         onPressed: () {
+        //           if (widget.filled != null) {
+        //             onPaymentPressed(widget.filled!);
+        //           } else if (_currentFilled != null) {
+        //             onPaymentPressed(_currentFilled!);
+        //           }
+        //         },
+        //         tooltip: languageProvider.isEnglish ? 'Make Payment' : 'ادائیگی کریں',
+        //       ),
+        //       IconButton(
+        //         icon:  Icon(Icons.history, color: Colors.green[600]),
+        //         onPressed: () {
+        //           if (widget.filled != null) {
+        //             onViewPayments(widget.filled!);
+        //           } else if (_currentFilled != null) {
+        //             onViewPayments(_currentFilled!);
+        //           }
+        //         },
+        //         tooltip: languageProvider.isEnglish ? 'View Payment History' : 'ادائیگی کی تاریخ دیکھیں',
+        //       ),
+        //     ],
+        //   ),
       ],
     );
   }

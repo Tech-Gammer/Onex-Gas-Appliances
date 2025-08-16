@@ -29,7 +29,6 @@ import 'items/ItemslistPage.dart';
 import 'items/inandoutpage.dart';
 import 'Purchase/purchaselistpage.dart';
 
-
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
 
@@ -162,7 +161,7 @@ class _DashboardState extends State<Dashboard> {
         children: [
           const SizedBox(height: 20),
           Center(
-            child: Image.asset('assets/images/logo.png', width: 80),
+            child: Image.asset('assets/images/logo.png', width: 150),
           ),
           const SizedBox(height: 20),
           _sidebarItem(Icons.home, 'Home', 'ہوم', () => _navigateTo(context, const Dashboard()), languageProvider),
