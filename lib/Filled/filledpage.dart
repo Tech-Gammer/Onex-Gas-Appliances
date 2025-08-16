@@ -3235,33 +3235,6 @@ class _filledpageState extends State<filledpage> {
             ),
           ),
         ),
-        // if ((widget.filled != null || _currentFilled != null) && _selectedCustomerId != null)
-        //   Row(
-        //     children: [
-        //       IconButton(
-        //         icon:  Icon(Icons.payment, color: Colors.green[600]),
-        //         onPressed: () {
-        //           if (widget.filled != null) {
-        //             onPaymentPressed(widget.filled!);
-        //           } else if (_currentFilled != null) {
-        //             onPaymentPressed(_currentFilled!);
-        //           }
-        //         },
-        //         tooltip: languageProvider.isEnglish ? 'Make Payment' : 'ادائیگی کریں',
-        //       ),
-        //       IconButton(
-        //         icon:  Icon(Icons.history, color: Colors.green[600]),
-        //         onPressed: () {
-        //           if (widget.filled != null) {
-        //             onViewPayments(widget.filled!);
-        //           } else if (_currentFilled != null) {
-        //             onViewPayments(_currentFilled!);
-        //           }
-        //         },
-        //         tooltip: languageProvider.isEnglish ? 'View Payment History' : 'ادائیگی کی تاریخ دیکھیں',
-        //       ),
-        //     ],
-        //   ),
       ],
     );
   }
