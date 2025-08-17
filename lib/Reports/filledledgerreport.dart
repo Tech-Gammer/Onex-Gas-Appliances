@@ -104,7 +104,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                           return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
                               date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
                         }).toList();
-                        _generateAndPrintPDF(provider.report, transactions, false);
+                        _generateAndPrintPDF(provider.report, transactions, false,  provider.expandedTransactions,);
                       },
                     ),
                     IconButton(
@@ -118,7 +118,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                           return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
                               date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
                         }).toList();
-                        await _generateAndPrintPDF(provider.report, transactions, true);
+                        await _generateAndPrintPDF(provider.report, transactions, true,  provider.expandedTransactions,);
                       },
                     ),
                   ],
@@ -214,12 +214,30 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
   Future<void> _generateAndPrintPDF(
       Map<String, dynamic> report,
       List<Map<String, dynamic>> transactions,
-      bool isShare
-      )
-  async {
+      bool isShare,
+      Set<String> expandedTransactions,
+      ) async {
     try {
       final pdf = pw.Document();
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      final reportProvider = Provider.of<FilledCustomerReportProvider>(context, listen: false);
+
+      // For PDF generation, we want to show all invoice items
+      // So let's create a set of all invoice transaction keys
+      Set<String> allInvoiceKeys = {};
+
+      // Load invoice items for all invoices in the transactions
+      for (var transaction in transactions) {
+        final isInvoice = (transaction['credit'] ?? 0) != 0;
+        if (isInvoice) {
+          final transactionKey = transaction['key']?.toString() ?? '';
+          if (transactionKey.isNotEmpty) {
+            allInvoiceKeys.add(transactionKey);
+            // Ensure invoice items are loaded for this transaction
+            await reportProvider.loadInvoiceItems(transactionKey);
+          }
+        }
+      }
 
       // Create Urdu text images if needed
       pw.MemoryImage? customerNameImage;
@@ -254,7 +272,13 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           build: (context) => [
             _buildPDFSummary(report),
             pw.SizedBox(height: 20),
-            _buildPDFTransactionTable(transactionsWithBalance, languageProvider, report),
+            _buildPDFTransactionTable(
+              transactionsWithBalance,
+              languageProvider,
+              report,
+              allInvoiceKeys, // Pass all invoice keys to show all items in PDF
+              reportProvider,
+            ),
           ],
         ),
       );
@@ -379,8 +403,9 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       List<Map<String, dynamic>> transactions,
       LanguageProvider languageProvider,
       Map<String, dynamic> report,
-      )
-  {
+      Set<String> expandedTransactions,
+      FilledCustomerReportProvider reportProvider,
+      ) {
     final headers = [
       languageProvider.isEnglish ? 'Date' : 'Date',
       languageProvider.isEnglish ? 'Details' : 'Details',
@@ -392,21 +417,26 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       languageProvider.isEnglish ? 'Balance' : 'Balance',
     ];
 
-    List<List<String>> tableData = [];
+    // Change this line: List<pw.Widget> to List<pw.TableRow>
+    List<pw.TableRow> tableRows = [];
 
     // Add opening balance row if exists
     final openingBalance = (report['openingBalance'] ?? 0).toDouble();
     if (openingBalance > 0) {
-      tableData.add([
-        '',
-        'Opening Balance',
-        '',
-        '',
-        '',
-        '',
-        'Rs ${openingBalance.toStringAsFixed(2)}',
-        'Rs ${openingBalance.toStringAsFixed(2)}',
-      ]);
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            _buildPdfTableCell(''),
+            _buildPdfTableCell('Opening Balance'),
+            _buildPdfTableCell(''),
+            _buildPdfTableCell(''),
+            _buildPdfTableCell(''),
+            _buildPdfTableCell(''),
+            _buildPdfTableCell('Rs ${openingBalance.toStringAsFixed(2)}', color: PdfColors.green),
+            _buildPdfTableCell('Rs ${openingBalance.toStringAsFixed(2)}', color: PdfColors.blue),
+          ],
+        ),
+      );
     }
 
     // Add transactions
@@ -421,17 +451,127 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       final debit = (transaction['debit'] ?? 0) > 0 ? 'Rs ${(transaction['debit']).toStringAsFixed(2)}' : '-';
       final credit = (transaction['credit'] ?? 0) > 0 ? 'Rs ${(transaction['credit']).toStringAsFixed(2)}' : '-';
       final balance = 'Rs ${(transaction['runningBalance']).toStringAsFixed(2)}';
+      final transactionKey = transaction['key']?.toString() ?? '';
+      final isExpanded = expandedTransactions.contains(transactionKey);
 
-      tableData.add([
-        DateFormat('dd/MM/yy').format(date),
-        details.length > 20 ? '${details.substring(0, 17)}...' : details,
-        isInvoice ? 'Invoice' : 'Payment',
-        _getPaymentMethodText(paymentMethod, languageProvider),
-        bankName.length > 15 ? '${bankName.substring(0, 12)}...' : bankName,
-        debit,
-        credit,
-        balance,
-      ]);
+      // Add main transaction row
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            _buildPdfTableCell(DateFormat('dd/MM/yy').format(date)),
+            _buildPdfTableCell(details.length > 20 ? '${details.substring(0, 17)}...' : details),
+            _buildPdfTableCell(isInvoice ? 'Invoice' : 'Payment'),
+            _buildPdfTableCell(_getPaymentMethodText(paymentMethod, languageProvider)),
+            _buildPdfTableCell(bankName.length > 15 ? '${bankName.substring(0, 12)}...' : bankName),
+            _buildPdfTableCell(debit, color: (transaction['debit'] ?? 0) > 0 ? PdfColors.red : PdfColors.grey),
+            _buildPdfTableCell(credit, color: (transaction['credit'] ?? 0) > 0 ? PdfColors.green : PdfColors.grey),
+            _buildPdfTableCell(balance, color: PdfColors.blue),
+          ],
+        ),
+      );
+
+      // Add invoice items if expanded
+      if (isInvoice && isExpanded) {
+        final invoiceItems = reportProvider.invoiceItems[transactionKey] ?? [];
+        if (invoiceItems.isNotEmpty) {
+          // Add a row that spans all columns for invoice items
+          tableRows.add(
+            pw.TableRow(
+              children: [
+                // Span across all columns using a Container
+                pw.Container(
+                  padding: pw.EdgeInsets.all(8),
+                  color: PdfColors.orange50,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Invoice Items:',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.orange700,
+                        ),
+                      ),
+                      pw.SizedBox(height: 6),
+                      // Create a sub-table for invoice items
+                      pw.Table(
+                        border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                        columnWidths: {
+                          0: pw.FlexColumnWidth(3), // Item Name
+                          1: pw.FlexColumnWidth(1), // Quantity
+                          2: pw.FlexColumnWidth(1.5), // Unit Price
+                          3: pw.FlexColumnWidth(1.5), // Total
+                        },
+                        children: [
+                          // Sub-table header
+                          pw.TableRow(
+                            decoration: pw.BoxDecoration(color: PdfColors.grey200),
+                            children: [
+                              _buildPdfTableCell('Item Name'),
+                              _buildPdfTableCell('Qty'),
+                              _buildPdfTableCell('Unit Price'),
+                              _buildPdfTableCell('Total'),
+                            ],
+                          ),
+                          // Invoice item rows
+                          ...invoiceItems.map((item) {
+                            return pw.TableRow(
+                              children: [
+                                _buildPdfTableCell(item['itemName']?.toString() ?? '-'),
+                                _buildPdfTableCell(item['quantity']?.toString() ?? '0'),
+                                _buildPdfTableCell('Rs ${(item['price'] ?? 0).toStringAsFixed(2)}'),
+                                _buildPdfTableCell('Rs ${(item['total'] ?? 0).toStringAsFixed(2)}', color: PdfColors.green),
+                              ],
+                            );
+                          }).toList(),
+                          // Invoice total row
+                          pw.TableRow(
+                            decoration: pw.BoxDecoration(color: PdfColors.green50),
+                            children: [
+                              _buildPdfTableCell('Total', color: PdfColors.green700),
+                              _buildPdfTableCell(''),
+                              _buildPdfTableCell(''),
+                              _buildPdfTableCell(
+                                'Rs ${invoiceItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0)).toStringAsFixed(2)}',
+                                color: PdfColors.green700,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Empty cells for the remaining columns
+                for (int i = 0; i < 7; i++) pw.Container(),
+              ],
+            ),
+          );
+        } else {
+          // If no invoice items found, add a loading message
+          tableRows.add(
+            pw.TableRow(
+              children: [
+                pw.Container(
+                  padding: pw.EdgeInsets.all(8),
+                  color: PdfColors.grey100,
+                  child: pw.Text(
+                    'Loading invoice items... (Items may not be available in PDF)',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontStyle: pw.FontStyle.italic,
+                      color: PdfColors.grey600,
+                    ),
+                  ),
+                ),
+                // Empty cells for the remaining columns
+                for (int i = 0; i < 7; i++) pw.Container(),
+              ],
+            ),
+          );
+        }
+      }
     }
 
     return pw.Column(
@@ -469,41 +609,25 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                   ),
               ).toList(),
             ),
-            // Data rows
-            ...tableData.map((row) =>
-                pw.TableRow(
-                  children: row.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final cell = entry.value;
-                    PdfColor? textColor;
-
-                    // Color coding for amounts
-                    if (index == 5 && cell.startsWith('Rs')) { // Debit column
-                      textColor = PdfColors.red;
-                    } else if (index == 6 && cell.startsWith('Rs')) { // Credit column
-                      textColor = PdfColors.green;
-                    } else if (index == 7) { // Balance column
-                      textColor = PdfColors.blue800;
-                    }
-
-                    return pw.Padding(
-                      padding: pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        cell,
-                        style: pw.TextStyle(
-                          fontSize: 7,
-                          color: textColor ?? PdfColors.black,
-                          fontWeight: index == 7 ? pw.FontWeight.bold : pw.FontWeight.normal,
-                        ),
-                        textAlign: pw.TextAlign.center,
-                      ),
-                    );
-                  }).toList(),
-                ),
-            ).toList(),
+            // Data rows - now correctly using List<pw.TableRow>
+            ...tableRows,
           ],
         ),
       ],
+    );
+  }
+
+  pw.Widget _buildPdfTableCell(String text, {PdfColor? color}) {
+    return pw.Padding(
+      padding: pw.EdgeInsets.all(4),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 7,
+          color: color ?? PdfColors.black,
+        ),
+        textAlign: pw.TextAlign.center,
+      ),
     );
   }
 

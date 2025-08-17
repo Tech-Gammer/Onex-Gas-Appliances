@@ -23,13 +23,13 @@ class FilledCustomerReportProvider with ChangeNotifier {
       expandedTransactions.add(transactionKey);
       // Load invoice items if not already loaded
       if (!invoiceItems.containsKey(transactionKey)) {
-        _loadInvoiceItems(transactionKey);
+        loadInvoiceItems(transactionKey);
       }
     }
     notifyListeners();
   }
 
-  Future<void> _loadInvoiceItems(String transactionKey) async {
+  Future<void> loadInvoiceItems(String transactionKey) async {
     try {
       print('Loading invoice items for transaction: $transactionKey');
 
