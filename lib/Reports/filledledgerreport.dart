@@ -222,18 +222,16 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       final reportProvider = Provider.of<FilledCustomerReportProvider>(context, listen: false);
 
-      // For PDF generation, we want to show all invoice items
-      // So let's create a set of all invoice transaction keys
-      Set<String> allInvoiceKeys = {};
-
-      // Load invoice items for all invoices in the transactions
+      // IMPORTANT: Only load invoice items for expanded transactions
+      // Don't load all invoices like before
       for (var transaction in transactions) {
         final isInvoice = (transaction['credit'] ?? 0) != 0;
-        if (isInvoice) {
-          final transactionKey = transaction['key']?.toString() ?? '';
-          if (transactionKey.isNotEmpty) {
-            allInvoiceKeys.add(transactionKey);
-            // Ensure invoice items are loaded for this transaction
+        final transactionKey = transaction['key']?.toString() ?? '';
+
+        // Only load if it's expanded AND it's an invoice
+        if (isInvoice && expandedTransactions.contains(transactionKey)) {
+          // Ensure invoice items are loaded for this expanded transaction
+          if (!reportProvider.invoiceItems.containsKey(transactionKey)) {
             await reportProvider.loadInvoiceItems(transactionKey);
           }
         }
@@ -276,7 +274,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               transactionsWithBalance,
               languageProvider,
               report,
-              allInvoiceKeys, // Pass all invoice keys to show all items in PDF
+              expandedTransactions, // Pass only expanded transactions
               reportProvider,
             ),
           ],
@@ -403,7 +401,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       List<Map<String, dynamic>> transactions,
       LanguageProvider languageProvider,
       Map<String, dynamic> report,
-      Set<String> expandedTransactions,
+      Set<String> expandedTransactions, // This should only contain expanded ones
       FilledCustomerReportProvider reportProvider,
       ) {
     final headers = [
@@ -417,7 +415,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       languageProvider.isEnglish ? 'Balance' : 'Balance',
     ];
 
-    // Change this line: List<pw.Widget> to List<pw.TableRow>
     List<pw.TableRow> tableRows = [];
 
     // Add opening balance row if exists
@@ -452,6 +449,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       final credit = (transaction['credit'] ?? 0) > 0 ? 'Rs ${(transaction['credit']).toStringAsFixed(2)}' : '-';
       final balance = 'Rs ${(transaction['runningBalance']).toStringAsFixed(2)}';
       final transactionKey = transaction['key']?.toString() ?? '';
+
+      // FIXED: Only check if this specific transaction is expanded
       final isExpanded = expandedTransactions.contains(transactionKey);
 
       // Add main transaction row
@@ -470,15 +469,16 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         ),
       );
 
-      // Add invoice items if expanded
+      // FIXED: Add invoice items ONLY if it's an invoice AND expanded
       if (isInvoice && isExpanded) {
         final invoiceItems = reportProvider.invoiceItems[transactionKey] ?? [];
+
         if (invoiceItems.isNotEmpty) {
-          // Add a row that spans all columns for invoice items
+          // Add invoice items as a separate table row spanning all columns
           tableRows.add(
             pw.TableRow(
               children: [
-                // Span across all columns using a Container
+                // First cell contains the invoice items, others are empty
                 pw.Container(
                   padding: pw.EdgeInsets.all(8),
                   color: PdfColors.orange50,
@@ -494,34 +494,34 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                         ),
                       ),
                       pw.SizedBox(height: 6),
-                      // Create a sub-table for invoice items
+                      // Fixed: Proper invoice items table
                       pw.Table(
                         border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
                         columnWidths: {
-                          0: pw.FlexColumnWidth(3), // Item Name
+                          0: pw.FlexColumnWidth(4), // Item Name - wider
                           1: pw.FlexColumnWidth(1), // Quantity
                           2: pw.FlexColumnWidth(1.5), // Unit Price
                           3: pw.FlexColumnWidth(1.5), // Total
                         },
                         children: [
-                          // Sub-table header
+                          // Invoice items header
                           pw.TableRow(
                             decoration: pw.BoxDecoration(color: PdfColors.grey200),
                             children: [
-                              _buildPdfTableCell('Item Name'),
-                              _buildPdfTableCell('Qty'),
-                              _buildPdfTableCell('Unit Price'),
-                              _buildPdfTableCell('Total'),
+                              _buildPdfInvoiceCell('Item Name', isHeader: true),
+                              _buildPdfInvoiceCell('Qty', isHeader: true),
+                              _buildPdfInvoiceCell('Unit Price', isHeader: true),
+                              _buildPdfInvoiceCell('Total', isHeader: true),
                             ],
                           ),
                           // Invoice item rows
                           ...invoiceItems.map((item) {
                             return pw.TableRow(
                               children: [
-                                _buildPdfTableCell(item['itemName']?.toString() ?? '-'),
-                                _buildPdfTableCell(item['quantity']?.toString() ?? '0'),
-                                _buildPdfTableCell('Rs ${(item['price'] ?? 0).toStringAsFixed(2)}'),
-                                _buildPdfTableCell('Rs ${(item['total'] ?? 0).toStringAsFixed(2)}', color: PdfColors.green),
+                                _buildPdfInvoiceCell(item['itemName']?.toString() ?? '-'),
+                                _buildPdfInvoiceCell(item['quantity']?.toString() ?? '0'),
+                                _buildPdfInvoiceCell('Rs ${(item['price'] ?? 0).toStringAsFixed(2)}'),
+                                _buildPdfInvoiceCell('Rs ${(item['total'] ?? 0).toStringAsFixed(2)}', color: PdfColors.green),
                               ],
                             );
                           }).toList(),
@@ -529,11 +529,12 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                           pw.TableRow(
                             decoration: pw.BoxDecoration(color: PdfColors.green50),
                             children: [
-                              _buildPdfTableCell('Total', color: PdfColors.green700),
-                              _buildPdfTableCell(''),
-                              _buildPdfTableCell(''),
-                              _buildPdfTableCell(
+                              _buildPdfInvoiceCell('Total', isHeader: true, color: PdfColors.green700),
+                              _buildPdfInvoiceCell('', color: PdfColors.green700),
+                              _buildPdfInvoiceCell('', color: PdfColors.green700),
+                              _buildPdfInvoiceCell(
                                 'Rs ${invoiceItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0)).toStringAsFixed(2)}',
+                                isHeader: true,
                                 color: PdfColors.green700,
                               ),
                             ],
@@ -543,13 +544,19 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                     ],
                   ),
                 ),
-                // Empty cells for the remaining columns
-                for (int i = 0; i < 7; i++) pw.Container(),
+                // Empty cells for the remaining 7 columns
+                pw.Container(color: PdfColors.orange50),
+                pw.Container(color: PdfColors.orange50),
+                pw.Container(color: PdfColors.orange50),
+                pw.Container(color: PdfColors.orange50),
+                pw.Container(color: PdfColors.orange50),
+                pw.Container(color: PdfColors.orange50),
+                pw.Container(color: PdfColors.orange50),
               ],
             ),
           );
         } else {
-          // If no invoice items found, add a loading message
+          // Show loading message if no items found
           tableRows.add(
             pw.TableRow(
               children: [
@@ -557,7 +564,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                   padding: pw.EdgeInsets.all(8),
                   color: PdfColors.grey100,
                   child: pw.Text(
-                    'Loading invoice items... (Items may not be available in PDF)',
+                    'No invoice items available for this transaction',
                     style: pw.TextStyle(
                       fontSize: 9,
                       fontStyle: pw.FontStyle.italic,
@@ -565,8 +572,14 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                     ),
                   ),
                 ),
-                // Empty cells for the remaining columns
-                for (int i = 0; i < 7; i++) pw.Container(),
+                // Empty cells for the remaining 7 columns
+                pw.Container(color: PdfColors.grey100),
+                pw.Container(color: PdfColors.grey100),
+                pw.Container(color: PdfColors.grey100),
+                pw.Container(color: PdfColors.grey100),
+                pw.Container(color: PdfColors.grey100),
+                pw.Container(color: PdfColors.grey100),
+                pw.Container(color: PdfColors.grey100),
               ],
             ),
           );
@@ -609,11 +622,28 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                   ),
               ).toList(),
             ),
-            // Data rows - now correctly using List<pw.TableRow>
+            // Data rows
             ...tableRows,
           ],
         ),
       ],
+    );
+  }
+
+
+  // Add this new helper method for invoice item cells:
+  pw.Widget _buildPdfInvoiceCell(String text, {bool isHeader = false, PdfColor? color}) {
+    return pw.Padding(
+      padding: pw.EdgeInsets.all(4),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: isHeader ? 8 : 7,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: color ?? PdfColors.black,
+        ),
+        textAlign: pw.TextAlign.center,
+      ),
     );
   }
 
