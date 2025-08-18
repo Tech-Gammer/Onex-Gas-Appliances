@@ -22,12 +22,16 @@ class FilledLedgerReportPage extends StatefulWidget {
   final String customerId;
   final String customerName;
   final String customerPhone;
+  final String customerAddress;
+  final String customerCity;
 
   const FilledLedgerReportPage({
     Key? key,
     required this.customerId,
     required this.customerName,
     required this.customerPhone,
+    required this.customerAddress,
+    required this.customerCity
   }) : super(key: key);
 
   @override
@@ -98,14 +102,14 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       onPressed: () {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
                         final transactions = provider.transactions;
-                        _generateAndPrintPDF(provider.report, transactions, false,  provider.expandedTransactions,);
+                        _generateAndPrintPDF(provider.report, transactions, false,  provider.expandedTransactions,provider.dateRangeFilter,);
                       },
                     ),
                     IconButton(
                       icon: const Icon(Icons.share, color: Colors.white),
                       onPressed: () async {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
-                        await _generateAndPrintPDF(provider.report, provider.transactions, true,  provider.expandedTransactions,);
+                        await _generateAndPrintPDF(provider.report, provider.transactions, true,  provider.expandedTransactions,provider.dateRangeFilter,);
                       },
                     ),
                   ],
@@ -193,20 +197,19 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     return pw.MemoryImage(buffer);
   }
 
-
   Future<void> _generateAndPrintPDF(
       Map<String, dynamic> report,
       List<Map<String, dynamic>> transactions,
       bool isShare,
       Set<String> expandedTransactions,
-      ) async {
+      DateTimeRange? dateRangeFilter, // Add this parameter
+      )
+  async {
     try {
       final pdf = pw.Document();
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       final reportProvider = Provider.of<FilledCustomerReportProvider>(context, listen: false);
 
-      // IMPORTANT: Only load invoice items for expanded transactions
-      // Don't load all invoices like before
       for (var transaction in transactions) {
         final isInvoice = (transaction['credit'] ?? 0) != 0;
         final transactionKey = transaction['key']?.toString() ?? '';
@@ -248,7 +251,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: pw.EdgeInsets.all(20),
-          header: (context) => _buildPDFHeader(languageProvider, customerNameImage, phoneNumberImage,reportProvider,),
+          header: (context) => _buildPDFHeader(languageProvider, customerNameImage, phoneNumberImage,reportProvider,dateRangeFilter),
           footer: (context) => _buildPDFFooter(context),
           build: (context) => [
             _buildPDFSummary(report),
@@ -260,6 +263,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               expandedTransactions, // Pass only expanded transactions
               reportProvider,
             ),
+            pw.SizedBox(height: 100),
+            pw.Text('Checked By ..........................')
           ],
         ),
       );
@@ -284,6 +289,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       pw.MemoryImage? customerNameImage,
       pw.MemoryImage? phoneNumberImage,
       FilledCustomerReportProvider reportProvider,
+      DateTimeRange? dateRangeFilter,
       )
   {
     // Add debug print
@@ -295,56 +301,60 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       decoration: pw.BoxDecoration(
         border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey400)),
       ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
-        children: [
-          // Company/App Title
-          pw.Text(
-            'Customer Ledger Report',
-            style: pw.TextStyle(
-              fontSize: 24,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.orange700,
+      child: pw.Center(   // 👈 this centers everything horizontally
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            // Company/App Title
+            pw.Text(
+              'Party Statement',
+              style: pw.TextStyle(
+                fontSize: 24,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.orange700,
+              ),
             ),
-          ),
-          pw.SizedBox(height: 10),
+            pw.SizedBox(height: 10),
 
-          // Customer Information
-          if (languageProvider.isEnglish) ...[
+            // Customer Information
+            if (languageProvider.isEnglish) ...[
+              pw.Text(
+                widget.customerName,
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text(
+                'Phone: ${widget.customerPhone}',
+                style: pw.TextStyle(fontSize: 14, color: PdfColors.grey700),
+              ),
+            ] else ...[
+              if (customerNameImage != null)
+                pw.Image(customerNameImage, height: 30),
+              if (phoneNumberImage != null)
+                pw.Image(phoneNumberImage, height: 20),
+            ],
+
+            pw.SizedBox(height: 5),
             pw.Text(
-              widget.customerName,
-              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              dateRangeFilter == null
+                  ? 'All Transactions'
+                  : 'Period: ${DateFormat('dd MMM yyyy').format(dateRangeFilter.start)} - ${DateFormat('dd MMM yyyy').format(dateRangeFilter.end)}',
+              style: pw.TextStyle(
+                  fontSize: 12,
+                  color: PdfColors.grey600,
+                  fontWeight: pw.FontWeight.bold),
             ),
+
+            pw.SizedBox(height: 3),
+
             pw.Text(
-              'Phone: ${widget.customerPhone}',
-              style: pw.TextStyle(fontSize: 14, color: PdfColors.grey700),
+              'Generated on: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}',
+              style: pw.TextStyle(fontSize: 10, color: PdfColors.grey500),
             ),
-          ] else ...[
-            if (customerNameImage != null)
-              pw.Image(customerNameImage, height: 30),
-            if (phoneNumberImage != null)
-              pw.Image(phoneNumberImage, height: 20),
           ],
-
-          pw.SizedBox(height: 5),
-
-          // Date Range with debug info
-          pw.Text(
-            reportProvider.dateRangeFilter == null
-                ? 'All Transactions'
-                : 'Period: ${DateFormat('dd MMM yyyy').format(reportProvider.dateRangeFilter!.start)} - ${DateFormat('dd MMM yyyy').format(reportProvider.dateRangeFilter!.end)}',
-            style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold),
-          ),
-
-          pw.SizedBox(height: 3),
-
-          pw.Text(
-            'Generated on: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}',
-            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey500),
-          ),
-        ],
+        ),
       ),
     );
+
   }
 
   pw.Widget _buildPDFFooter(pw.Context context) {
@@ -393,7 +403,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       Map<String, dynamic> report,
       Set<String> expandedTransactions,
       FilledCustomerReportProvider reportProvider,
-      ) {
+      )
+  {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -607,14 +618,14 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-
   // Add this new helper method for invoice item cells:
   pw.Widget _buildPdfInvoiceCell(
       String text, {
         bool isHeader = false,
         PdfColor? color,
         pw.Alignment? alignment,
-      }) {
+      })
+  {
     return pw.Padding(
       padding: pw.EdgeInsets.all(6),
       child: pw.Align(
@@ -731,7 +742,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     }
   }
 
-
   Widget _buildCustomerInfo(BuildContext context, LanguageProvider languageProvider, FilledCustomerReportProvider provider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
@@ -750,6 +760,14 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
             '${languageProvider.isEnglish ? 'Phone Number:' : 'فون نمبر:'} ${widget.customerPhone}',
             style: TextStyle(color: Color(0xFFFF8A65)),
           ),
+          Text(
+            '${languageProvider.isEnglish ? 'Address:' : 'پتہ:'} ${widget.customerAddress}',
+            style: TextStyle(color: Color(0xFFFF8A65)),
+          ),
+          Text(
+            '${languageProvider.isEnglish ? 'City:' : 'شہر:'} ${widget.customerCity}',
+            style: TextStyle(color: Color(0xFFFF8A65)),
+          ),
           const SizedBox(height: 10),
           Text(
             provider.isFiltered && provider.dateRangeFilter != null
@@ -766,7 +784,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     return Consumer<FilledCustomerReportProvider>(
       builder: (context, provider, child) {
         return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             ElevatedButton.icon(
               onPressed: () async {
@@ -802,8 +820,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       },
     );
   }
-
-
 
   Widget _buildSummaryCards(Map<String, dynamic> report) {
     final isMobile = MediaQuery.of(context).size.width < 600;
@@ -1141,7 +1157,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       FilledCustomerReportProvider reportProvider,
       bool isMobile,
       LanguageProvider languageProvider,
-      ) {
+      )
+  {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1335,7 +1352,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       bool isMobile, {
         Color? textColor,
         FontWeight? fontWeight,
-      }) {
+      })
+  {
     return Container(
       width: width,
       padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -1356,8 +1374,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       ),
     );
   }
-
-
 
   String _getPaymentMethodText(String? method, LanguageProvider languageProvider) {
     if (method == null) return '-';

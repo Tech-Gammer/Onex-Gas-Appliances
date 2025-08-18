@@ -30,7 +30,7 @@ class _FilledcustomerlistpageState extends State<Filledcustomerlistpage> {
     });
   }
 
-  void _showReportOptions(BuildContext context, String customerName, String customerPhone, String customerId) {
+  void _showReportOptions(BuildContext context, String customerName, String customerPhone, String customerId,String customerAddress,String customerCity) {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     showDialog(
@@ -66,6 +66,8 @@ class _FilledcustomerlistpageState extends State<Filledcustomerlistpage> {
                         customerId: customerId,
                         customerName: customerName,
                         customerPhone: customerPhone,
+                        customerAddress: customerAddress,
+                        customerCity: customerCity,
                       ),
                     ),
                   );
@@ -218,6 +220,8 @@ class _FilledcustomerlistpageState extends State<Filledcustomerlistpage> {
                         customer.name,
                         customer.phone,
                         customer.id,
+                        customer.address,
+                        customer.city
                       );
                     },
                   ),
