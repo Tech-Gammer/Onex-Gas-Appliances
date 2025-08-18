@@ -97,13 +97,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
                       onPressed: () {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
-                        final transactions = selectedDateRange == null
-                            ? provider.transactions
-                            : provider.transactions.where((transaction) {
-                          final date = DateTime.parse(transaction['date']);
-                          return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
-                              date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
-                        }).toList();
+                        final transactions = provider.transactions;
                         _generateAndPrintPDF(provider.report, transactions, false,  provider.expandedTransactions,);
                       },
                     ),
@@ -111,14 +105,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       icon: const Icon(Icons.share, color: Colors.white),
                       onPressed: () async {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
-                        final transactions = selectedDateRange == null
-                            ? provider.transactions
-                            : provider.transactions.where((transaction) {
-                          final date = DateTime.parse(transaction['date']);
-                          return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
-                              date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
-                        }).toList();
-                        await _generateAndPrintPDF(provider.report, transactions, true,  provider.expandedTransactions,);
+                        await _generateAndPrintPDF(provider.report, provider.transactions, true,  provider.expandedTransactions,);
                       },
                     ),
                   ],
@@ -149,13 +136,9 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 return Center(child: Text(provider.error));
               }
               final report = provider.report;
-              final transactions = selectedDateRange == null
-                  ? provider.transactions
-                  : provider.transactions.where((transaction) {
-                final date = DateTime.parse(transaction['date']);
-                return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
-                    date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
-              }).toList();
+
+              final transactions = provider.transactions;
+
 
               return SingleChildScrollView(
                 child: Padding(
@@ -163,7 +146,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildCustomerInfo(context, languageProvider),
+                      _buildCustomerInfo(context, languageProvider,provider),
                       _buildDateRangeSelector(languageProvider),
                       _buildSummaryCards(report),
                       Text(
@@ -265,7 +248,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: pw.EdgeInsets.all(20),
-          header: (context) => _buildPDFHeader(languageProvider, customerNameImage, phoneNumberImage),
+          header: (context) => _buildPDFHeader(languageProvider, customerNameImage, phoneNumberImage,reportProvider,),
           footer: (context) => _buildPDFFooter(context),
           build: (context) => [
             _buildPDFSummary(report),
@@ -300,8 +283,13 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       LanguageProvider languageProvider,
       pw.MemoryImage? customerNameImage,
       pw.MemoryImage? phoneNumberImage,
+      FilledCustomerReportProvider reportProvider,
       )
   {
+    // Add debug print
+    print('PDF Header - Date Range Filter: ${reportProvider.dateRangeFilter}');
+    print('PDF Header - Is Filtered: ${reportProvider.isFiltered}');
+
     return pw.Container(
       padding: pw.EdgeInsets.only(bottom: 20),
       decoration: pw.BoxDecoration(
@@ -340,13 +328,15 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
 
           pw.SizedBox(height: 5),
 
-          // Date Range
+          // Date Range with debug info
           pw.Text(
-            selectedDateRange == null
+            reportProvider.dateRangeFilter == null
                 ? 'All Transactions'
-                : '${DateFormat('dd MMM yyyy').format(selectedDateRange!.start)} - ${DateFormat('dd MMM yyyy').format(selectedDateRange!.end)}',
-            style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+                : 'Period: ${DateFormat('dd MMM yyyy').format(reportProvider.dateRangeFilter!.start)} - ${DateFormat('dd MMM yyyy').format(reportProvider.dateRangeFilter!.end)}',
+            style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold),
           ),
+
+          pw.SizedBox(height: 3),
 
           pw.Text(
             'Generated on: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}',
@@ -401,110 +391,143 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       List<Map<String, dynamic>> transactions,
       LanguageProvider languageProvider,
       Map<String, dynamic> report,
-      Set<String> expandedTransactions, // This should only contain expanded ones
+      Set<String> expandedTransactions,
       FilledCustomerReportProvider reportProvider,
       ) {
-    final headers = [
-      languageProvider.isEnglish ? 'Date' : 'Date',
-      languageProvider.isEnglish ? 'Details' : 'Details',
-      languageProvider.isEnglish ? 'Type' : 'Type',
-      languageProvider.isEnglish ? 'Payment Method' : 'Method',
-      languageProvider.isEnglish ? 'Bank' : 'Bank',
-      languageProvider.isEnglish ? 'Debit' : 'Debit',
-      languageProvider.isEnglish ? 'Credit' : 'Credit',
-      languageProvider.isEnglish ? 'Balance' : 'Balance',
-    ];
-
-    List<pw.TableRow> tableRows = [];
-
-    // Add opening balance row if exists
-    final openingBalance = (report['openingBalance'] ?? 0).toDouble();
-    if (openingBalance > 0) {
-      tableRows.add(
-        pw.TableRow(
-          children: [
-            _buildPdfTableCell(''),
-            _buildPdfTableCell('Opening Balance'),
-            _buildPdfTableCell(''),
-            _buildPdfTableCell(''),
-            _buildPdfTableCell(''),
-            _buildPdfTableCell(''),
-            _buildPdfTableCell('Rs ${openingBalance.toStringAsFixed(2)}', color: PdfColors.green),
-            _buildPdfTableCell('Rs ${openingBalance.toStringAsFixed(2)}', color: PdfColors.blue),
-          ],
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Transaction Details (${transactions.length} entries)',
+          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
         ),
-      );
-    }
+        pw.SizedBox(height: 10),
 
-    // Add transactions
-    for (var transaction in transactions) {
-      final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
-      final details = transaction['details']?.toString() ??
-          transaction['referenceNumber']?.toString() ??
-          transaction['filledNumber']?.toString() ?? '-';
-      final isInvoice = (transaction['credit'] ?? 0) != 0;
-      final paymentMethod = transaction['paymentMethod']?.toString() ?? '-';
-      final bankName = _getBankName(transaction) ?? '-';
-      final debit = (transaction['debit'] ?? 0) > 0 ? 'Rs ${(transaction['debit']).toStringAsFixed(2)}' : '-';
-      final credit = (transaction['credit'] ?? 0) > 0 ? 'Rs ${(transaction['credit']).toStringAsFixed(2)}' : '-';
-      final balance = 'Rs ${(transaction['runningBalance']).toStringAsFixed(2)}';
-      final transactionKey = transaction['key']?.toString() ?? '';
+        // Create separate widgets for each transaction and its invoice items
+        ...transactions.expand((transaction) {
+          List<pw.Widget> rowWidgets = [];
 
-      // FIXED: Only check if this specific transaction is expanded
-      final isExpanded = expandedTransactions.contains(transactionKey);
+          final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
+          final details = transaction['details']?.toString() ??
+              transaction['referenceNumber']?.toString() ??
+              transaction['filledNumber']?.toString() ?? '-';
+          final isInvoice = (transaction['credit'] ?? 0) != 0;
+          final paymentMethod = transaction['paymentMethod']?.toString() ?? '-';
+          final bankName = _getBankName(transaction) ?? '-';
+          final debit = (transaction['debit'] ?? 0) > 0 ? 'Rs ${(transaction['debit']).toStringAsFixed(2)}' : '-';
+          final credit = (transaction['credit'] ?? 0) > 0 ? 'Rs ${(transaction['credit']).toStringAsFixed(2)}' : '-';
+          final balance = 'Rs ${(transaction['runningBalance']).toStringAsFixed(2)}';
+          final transactionKey = transaction['key']?.toString() ?? '';
+          final isExpanded = expandedTransactions.contains(transactionKey);
 
-      // Add main transaction row
-      tableRows.add(
-        pw.TableRow(
-          children: [
-            _buildPdfTableCell(DateFormat('dd/MM/yy').format(date)),
-            _buildPdfTableCell(details.length > 20 ? '${details.substring(0, 17)}...' : details),
-            _buildPdfTableCell(isInvoice ? 'Invoice' : 'Payment'),
-            _buildPdfTableCell(_getPaymentMethodText(paymentMethod, languageProvider)),
-            _buildPdfTableCell(bankName.length > 15 ? '${bankName.substring(0, 12)}...' : bankName),
-            _buildPdfTableCell(debit, color: (transaction['debit'] ?? 0) > 0 ? PdfColors.red : PdfColors.grey),
-            _buildPdfTableCell(credit, color: (transaction['credit'] ?? 0) > 0 ? PdfColors.green : PdfColors.grey),
-            _buildPdfTableCell(balance, color: PdfColors.blue),
-          ],
-        ),
-      );
-
-      // FIXED: Add invoice items ONLY if it's an invoice AND expanded
-      if (isInvoice && isExpanded) {
-        final invoiceItems = reportProvider.invoiceItems[transactionKey] ?? [];
-
-        if (invoiceItems.isNotEmpty) {
-          // Add invoice items as a separate table row spanning all columns
-          tableRows.add(
-            pw.TableRow(
+          // Add main transaction as a single-row table
+          rowWidgets.add(
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey400),
+              columnWidths: {
+                0: pw.FixedColumnWidth(60),  // Date
+                1: pw.FixedColumnWidth(80),  // Details
+                2: pw.FixedColumnWidth(50),  // Type
+                3: pw.FixedColumnWidth(60),  // Payment Method
+                4: pw.FixedColumnWidth(70),  // Bank
+                5: pw.FixedColumnWidth(60),  // Debit
+                6: pw.FixedColumnWidth(60),  // Credit
+                7: pw.FixedColumnWidth(60),  // Balance
+              },
               children: [
-                // First cell contains the invoice items, others are empty
+                // Only show header for first transaction
+                if (transaction == transactions.first) ...[
+                  pw.TableRow(
+                    decoration: pw.BoxDecoration(color: PdfColors.orange100),
+                    children: [
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Date' : 'Date', isHeader: true),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Details' : 'Details', isHeader: true),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Type' : 'Type', isHeader: true),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Payment Method' : 'Method', isHeader: true),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Bank' : 'Bank', isHeader: true),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Debit' : 'Debit', isHeader: true),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Credit' : 'Credit', isHeader: true),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Balance' : 'Balance', isHeader: true),
+                    ],
+                  ),
+                ],
+
+                // Transaction row
+                pw.TableRow(
+                  children: [
+                    _buildPdfTableCell(DateFormat('dd/MM/yy').format(date)),
+                    _buildPdfTableCell(details.length > 20 ? '${details.substring(0, 17)}...' : details),
+                    _buildPdfTableCell(isInvoice ? 'Invoice' : 'Payment'),
+                    _buildPdfTableCell(_getPaymentMethodText(paymentMethod, languageProvider)),
+                    _buildPdfTableCell(bankName.length > 15 ? '${bankName.substring(0, 12)}...' : bankName),
+                    _buildPdfTableCell(debit, color: (transaction['debit'] ?? 0) > 0 ? PdfColors.red : PdfColors.grey),
+                    _buildPdfTableCell(credit, color: (transaction['credit'] ?? 0) > 0 ? PdfColors.green : PdfColors.grey),
+                    _buildPdfTableCell(balance, color: PdfColors.blue),
+                  ],
+                ),
+              ],
+            ),
+          );
+
+          // Add full-width invoice items table if expanded
+          if (isInvoice && isExpanded) {
+            final invoiceItems = reportProvider.invoiceItems[transactionKey] ?? [];
+
+            rowWidgets.add(pw.SizedBox(height: 5)); // Small gap
+
+            if (invoiceItems.isNotEmpty) {
+              rowWidgets.add(
                 pw.Container(
-                  padding: pw.EdgeInsets.all(8),
-                  color: PdfColors.orange50,
+                  width: double.infinity,
+                  padding: pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.orange50,
+                    border: pw.Border.all(color: PdfColors.orange200),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(
-                        'Invoice Items:',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.orange700,
-                        ),
+                      pw.Row(
+                        children: [
+                          pw.Container(
+                            width: 3,
+                            height: 16,
+                            color: PdfColors.orange,
+                          ),
+                          pw.SizedBox(width: 8),
+                          pw.Text(
+                            'Invoice Items - ${DateFormat('dd MMM yyyy').format(date)}',
+                            style: pw.TextStyle(
+                              fontSize: 12,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.orange700,
+                            ),
+                          ),
+                          pw.Spacer(),
+                          pw.Text(
+                            'Total: Rs ${invoiceItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0)).toStringAsFixed(2)}',
+                            style: pw.TextStyle(
+                              fontSize: 11,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.green700,
+                            ),
+                          ),
+                        ],
                       ),
-                      pw.SizedBox(height: 6),
-                      // Fixed: Proper invoice items table
+                      pw.SizedBox(height: 8),
+
+                      // Full-width invoice items table
                       pw.Table(
                         border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
                         columnWidths: {
-                          0: pw.FlexColumnWidth(4), // Item Name - wider
-                          1: pw.FlexColumnWidth(1), // Quantity
-                          2: pw.FlexColumnWidth(1.5), // Unit Price
-                          3: pw.FlexColumnWidth(1.5), // Total
+                          0: pw.FlexColumnWidth(5), // Item Name - much wider
+                          1: pw.FlexColumnWidth(1.5), // Quantity
+                          2: pw.FlexColumnWidth(2.5), // Unit Price
+                          3: pw.FlexColumnWidth(2.5), // Total
                         },
                         children: [
-                          // Invoice items header
+                          // Header
                           pw.TableRow(
                             decoration: pw.BoxDecoration(color: PdfColors.grey200),
                             children: [
@@ -514,24 +537,30 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                               _buildPdfInvoiceCell('Total', isHeader: true),
                             ],
                           ),
-                          // Invoice item rows
+                          // Items
                           ...invoiceItems.map((item) {
                             return pw.TableRow(
                               children: [
-                                _buildPdfInvoiceCell(item['itemName']?.toString() ?? '-'),
+                                _buildPdfInvoiceCell(
+                                  item['itemName']?.toString() ?? '-',
+                                  alignment: pw.Alignment.centerLeft,
+                                ),
                                 _buildPdfInvoiceCell(item['quantity']?.toString() ?? '0'),
                                 _buildPdfInvoiceCell('Rs ${(item['price'] ?? 0).toStringAsFixed(2)}'),
-                                _buildPdfInvoiceCell('Rs ${(item['total'] ?? 0).toStringAsFixed(2)}', color: PdfColors.green),
+                                _buildPdfInvoiceCell(
+                                  'Rs ${(item['total'] ?? 0).toStringAsFixed(2)}',
+                                  color: PdfColors.green700,
+                                ),
                               ],
                             );
                           }).toList(),
-                          // Invoice total row
+                          // Total row
                           pw.TableRow(
                             decoration: pw.BoxDecoration(color: PdfColors.green50),
                             children: [
-                              _buildPdfInvoiceCell('Total', isHeader: true, color: PdfColors.green700),
-                              _buildPdfInvoiceCell('', color: PdfColors.green700),
-                              _buildPdfInvoiceCell('', color: PdfColors.green700),
+                              _buildPdfInvoiceCell('Grand Total', isHeader: true, color: PdfColors.green700),
+                              _buildPdfInvoiceCell(''),
+                              _buildPdfInvoiceCell(''),
                               _buildPdfInvoiceCell(
                                 'Rs ${invoiceItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0)).toStringAsFixed(2)}',
                                 isHeader: true,
@@ -544,25 +573,18 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                     ],
                   ),
                 ),
-                // Empty cells for the remaining 7 columns
-                pw.Container(color: PdfColors.orange50),
-                pw.Container(color: PdfColors.orange50),
-                pw.Container(color: PdfColors.orange50),
-                pw.Container(color: PdfColors.orange50),
-                pw.Container(color: PdfColors.orange50),
-                pw.Container(color: PdfColors.orange50),
-                pw.Container(color: PdfColors.orange50),
-              ],
-            ),
-          );
-        } else {
-          // Show loading message if no items found
-          tableRows.add(
-            pw.TableRow(
-              children: [
+              );
+            } else {
+              // No items available
+              rowWidgets.add(
                 pw.Container(
+                  width: double.infinity,
                   padding: pw.EdgeInsets.all(8),
-                  color: PdfColors.grey100,
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey100,
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
                   child: pw.Text(
                     'No invoice items available for this transaction',
                     style: pw.TextStyle(
@@ -570,69 +592,46 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       fontStyle: pw.FontStyle.italic,
                       color: PdfColors.grey600,
                     ),
+                    textAlign: pw.TextAlign.center,
                   ),
                 ),
-                // Empty cells for the remaining 7 columns
-                pw.Container(color: PdfColors.grey100),
-                pw.Container(color: PdfColors.grey100),
-                pw.Container(color: PdfColors.grey100),
-                pw.Container(color: PdfColors.grey100),
-                pw.Container(color: PdfColors.grey100),
-                pw.Container(color: PdfColors.grey100),
-                pw.Container(color: PdfColors.grey100),
-              ],
-            ),
-          );
-        }
-      }
-    }
+              );
+            }
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          'Transaction Details (${transactions.length} entries)',
-          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.SizedBox(height: 10),
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey400),
-          columnWidths: {
-            0: pw.FixedColumnWidth(60),  // Date
-            1: pw.FixedColumnWidth(80),  // Details
-            2: pw.FixedColumnWidth(50),  // Type
-            3: pw.FixedColumnWidth(60),  // Payment Method
-            4: pw.FixedColumnWidth(70),  // Bank
-            5: pw.FixedColumnWidth(60),  // Debit
-            6: pw.FixedColumnWidth(60),  // Credit
-            7: pw.FixedColumnWidth(60),  // Balance
-          },
-          children: [
-            // Header row
-            pw.TableRow(
-              decoration: pw.BoxDecoration(color: PdfColors.orange100),
-              children: headers.map((header) =>
-                  pw.Padding(
-                    padding: pw.EdgeInsets.all(4),
-                    child: pw.Text(
-                      header,
-                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-                      textAlign: pw.TextAlign.center,
-                    ),
-                  ),
-              ).toList(),
-            ),
-            // Data rows
-            ...tableRows,
-          ],
-        ),
+            rowWidgets.add(pw.SizedBox(height: 5)); // Gap after invoice items
+          }
+
+          return rowWidgets;
+        }).toList(),
       ],
     );
   }
 
 
   // Add this new helper method for invoice item cells:
-  pw.Widget _buildPdfInvoiceCell(String text, {bool isHeader = false, PdfColor? color}) {
+  pw.Widget _buildPdfInvoiceCell(
+      String text, {
+        bool isHeader = false,
+        PdfColor? color,
+        pw.Alignment? alignment,
+      }) {
+    return pw.Padding(
+      padding: pw.EdgeInsets.all(6),
+      child: pw.Align(
+        alignment: alignment ?? pw.Alignment.center,
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(
+            fontSize: isHeader ? 9 : 8,
+            fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+            color: color ?? PdfColors.black,
+          ),
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfTableCell(String text, {PdfColor? color, bool isHeader = false}) {
     return pw.Padding(
       padding: pw.EdgeInsets.all(4),
       child: pw.Text(
@@ -640,20 +639,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         style: pw.TextStyle(
           fontSize: isHeader ? 8 : 7,
           fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: color ?? PdfColors.black,
-        ),
-        textAlign: pw.TextAlign.center,
-      ),
-    );
-  }
-
-  pw.Widget _buildPdfTableCell(String text, {PdfColor? color}) {
-    return pw.Padding(
-      padding: pw.EdgeInsets.all(4),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          fontSize: 7,
           color: color ?? PdfColors.black,
         ),
         textAlign: pw.TextAlign.center,
@@ -747,7 +732,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
   }
 
 
-  Widget _buildCustomerInfo(BuildContext context, LanguageProvider languageProvider) {
+  Widget _buildCustomerInfo(BuildContext context, LanguageProvider languageProvider, FilledCustomerReportProvider provider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Center(
@@ -767,9 +752,9 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            selectedDateRange == null
-                ? 'All Transactions'
-                : '${DateFormat('dd MMM yy').format(selectedDateRange!.start)} - ${DateFormat('dd MMM yy').format(selectedDateRange!.end)}',
+            provider.isFiltered && provider.dateRangeFilter != null
+                ? '${DateFormat('dd MMM yy').format(provider.dateRangeFilter!.start)} - ${DateFormat('dd MMM yy').format(provider.dateRangeFilter!.end)}'
+                : 'All Transactions',
             style: TextStyle(color: Color(0xFFFF8A65)),
           ),
         ],
@@ -778,38 +763,47 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
   }
 
   Widget _buildDateRangeSelector(LanguageProvider languageProvider) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        ElevatedButton.icon(
-          onPressed: () async {
-            final pickedDateRange = await showDateRangePicker(
-              context: context,
-              firstDate: DateTime(2000),
-              lastDate: DateTime.now(),
-            );
-            if (pickedDateRange != null) {
-              setState(() => selectedDateRange = pickedDateRange);
-            }
-          },
-          icon: const Icon(Icons.date_range),
-          label: Text(languageProvider.isEnglish ? 'Select Date Range' : 'تاریخ منتخب کریں'),
-          style: ElevatedButton.styleFrom(
-            foregroundColor: Colors.white,
-            backgroundColor: Color(0xFFFF8A65), // Orange button
-          ),
-        ),
-        if (selectedDateRange != null)
-          TextButton(
-            onPressed: () => setState(() => selectedDateRange = null),
-            child: Text(
-              languageProvider.isEnglish ? 'Clear Filter' : 'فلٹر صاف کریں',
-              style: TextStyle(color: Color(0xFFFF8A65)),
+    return Consumer<FilledCustomerReportProvider>(
+      builder: (context, provider, child) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () async {
+                final pickedDateRange = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now(),
+                  initialDateRange: provider.dateRangeFilter,
+                );
+                if (pickedDateRange != null) {
+                  provider.setDateRangeFilter(pickedDateRange);
+                }
+              },
+              icon: const Icon(Icons.date_range),
+              label: Text(languageProvider.isEnglish ? 'Select Date Range' : 'تاریخ منتخب کریں'),
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: Color(0xFFFF8A65),
+              ),
             ),
-          ),
-      ],
+            if (provider.isFiltered)
+              TextButton(
+                onPressed: () {
+                  provider.setDateRangeFilter(null);
+                },
+                child: Text(
+                  languageProvider.isEnglish ? 'Clear Filter' : 'فلٹر صاف کریں',
+                  style: const TextStyle(color: Color(0xFFFF8A65)),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
+
+
 
   Widget _buildSummaryCards(Map<String, dynamic> report) {
     final isMobile = MediaQuery.of(context).size.width < 600;

@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -10,11 +9,221 @@ class FilledCustomerReportProvider with ChangeNotifier {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   bool isLoading = false;
   String error = '';
-  List<Map<String, dynamic>> transactions = [];
   Map<String, dynamic> report = {};
   double openingBalance = 0.0;
   Set<String> expandedTransactions = {};
   Map<String, List<Map<String, dynamic>>> invoiceItems = {};
+  List<Map<String, dynamic>> _allTransactions = [];
+  List<Map<String, dynamic>> _filteredTransactions = [];
+  DateTimeRange? _dateRangeFilter;
+  DateTimeRange? get dateRangeFilter => _dateRangeFilter;
+  bool get isFiltered => _dateRangeFilter != null;
+  // Fixed getter to return proper transactions list
+  List<Map<String, dynamic>> get transactions =>
+      _dateRangeFilter == null ? _allTransactions : _filteredTransactions;
+
+  void setDateRangeFilter(DateTimeRange? range) {
+    _dateRangeFilter = range;
+    if (range != null) {
+      _applyDateFilter(range);
+    } else {
+      // When clearing filter, use all transactions
+      _filteredTransactions.clear();
+      _calculateReport(_allTransactions);
+    }
+    notifyListeners();
+  }
+
+  // Replace your _applyDateFilter method in FilledCustomerReportProvider with this:
+
+  void _applyDateFilter(DateTimeRange range) {
+    print('Applying date filter from ${range.start} to ${range.end}');
+
+    // Filter transactions by date range
+    _filteredTransactions = _allTransactions.where((transaction) {
+      // Use the 'date' field which should contain the createdAt value
+      final dateValue = transaction['date'] ?? transaction['createdAt'];
+      final date = _parseFirebaseDate(dateValue);
+
+      if (date == null) {
+        print('Skipping transaction with invalid date: $dateValue');
+        return false;
+      }
+
+      // Convert date to start of day for proper comparison
+      final transactionDate = DateTime(date.year, date.month, date.day);
+      final rangeStart = DateTime(range.start.year, range.start.month, range.start.day);
+      final rangeEnd = DateTime(range.end.year, range.end.month, range.end.day);
+
+      // FIXED: Use proper date range comparison
+      final isInRange = (transactionDate.isAtSameMomentAs(rangeStart) ||
+          transactionDate.isAtSameMomentAs(rangeEnd) ||
+          (transactionDate.isAfter(rangeStart) && transactionDate.isBefore(rangeEnd)));
+
+      print('Transaction ${transaction['referenceNumber']} on $transactionDate - in range: $isInRange');
+      return isInRange;
+    }).toList();
+
+    print('Found ${_filteredTransactions.length} matching transactions out of ${_allTransactions.length} total');
+
+    // Sort filtered transactions by date
+    _filteredTransactions.sort((a, b) {
+      final dateA = _parseFirebaseDate(a['date'] ?? a['createdAt']) ?? DateTime(2000);
+      final dateB = _parseFirebaseDate(b['date'] ?? b['createdAt']) ?? DateTime(2000);
+      return dateA.compareTo(dateB);
+    });
+
+    // Recalculate balances for filtered transactions
+    _recalculateBalancesForFiltered();
+
+    // Update report with filtered data
+    _calculateReport(_filteredTransactions);
+  }
+
+// Also, update your _parseFirebaseDate method to handle more date formats:
+  DateTime? _parseFirebaseDate(dynamic dateValue) {
+    if (dateValue == null) return null;
+
+    try {
+      if (dateValue is String) {
+        // Remove any extra whitespace
+        String cleanDate = dateValue.trim();
+
+        // Handle different string formats
+        if (cleanDate.contains('T')) {
+          // ISO format: 2024-01-15T10:30:00.000Z or 2024-01-15T10:30:00
+          return DateTime.parse(cleanDate);
+        } else if (cleanDate.contains('-')) {
+          // Date format: 2024-01-15 or 2024-01-15 10:30:00
+          if (cleanDate.contains(' ')) {
+            // Has time component
+            return DateTime.parse(cleanDate);
+          } else {
+            // Date only, add time to make it parseable
+            return DateTime.parse('$cleanDate 00:00:00');
+          }
+        } else if (cleanDate.contains('/')) {
+          // Handle dd/MM/yyyy or MM/dd/yyyy format
+          final parts = cleanDate.split('/');
+          if (parts.length == 3) {
+            try {
+              // Try dd/MM/yyyy format first (more common in many regions)
+              return DateTime(
+                int.parse(parts[2]), // year
+                int.parse(parts[1]), // month
+                int.parse(parts[0]), // day
+              );
+            } catch (e) {
+              try {
+                // Try MM/dd/yyyy format
+                return DateTime(
+                  int.parse(parts[2]), // year
+                  int.parse(parts[0]), // month
+                  int.parse(parts[1]), // day
+                );
+              } catch (e) {
+                print('Could not parse date with / format: $cleanDate');
+              }
+            }
+          }
+        }
+
+        // Try to parse as timestamp string
+        final timestamp = int.tryParse(cleanDate);
+        if (timestamp != null) {
+          // Check if it's in milliseconds or seconds
+          if (timestamp > 1000000000000) {
+            return DateTime.fromMillisecondsSinceEpoch(timestamp);
+          } else {
+            return DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+          }
+        }
+
+      } else if (dateValue is int) {
+        // Timestamp - check if it's in milliseconds or seconds
+        if (dateValue > 1000000000000) {
+          return DateTime.fromMillisecondsSinceEpoch(dateValue);
+        } else {
+          return DateTime.fromMillisecondsSinceEpoch(dateValue * 1000);
+        }
+      } else if (dateValue is double) {
+        // Handle double timestamp
+        final timestamp = dateValue.toInt();
+        if (timestamp > 1000000000000) {
+          return DateTime.fromMillisecondsSinceEpoch(timestamp);
+        } else {
+          return DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        }
+      } else if (dateValue is Map && dateValue.containsKey('_seconds')) {
+        // Firestore Timestamp format
+        final seconds = dateValue['_seconds'] as int;
+        return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+      }
+    } catch (e) {
+      print('Error parsing date "$dateValue": $e');
+    }
+
+    print('Could not parse date: $dateValue (type: ${dateValue.runtimeType})');
+    return null;
+  }
+
+  void _recalculateBalancesForFiltered() {
+    if (_filteredTransactions.isEmpty) return;
+
+    // Find the balance before the first filtered transaction
+    double startingBalance = openingBalance;
+
+    if (_filteredTransactions.isNotEmpty) {
+      final firstFilteredDate = _parseFirebaseDate(_filteredTransactions.first['date'] ?? _filteredTransactions.first['createdAt']);
+
+      if (firstFilteredDate != null) {
+        // Calculate balance up to the first filtered transaction
+        for (var transaction in _allTransactions) {
+          final transactionDate = _parseFirebaseDate(transaction['date'] ?? transaction['createdAt']);
+          if (transactionDate != null && transactionDate.isBefore(firstFilteredDate)) {
+            final debit = (transaction['debit'] ?? 0.0).toDouble();
+            final credit = (transaction['credit'] ?? 0.0).toDouble();
+            startingBalance = startingBalance + credit - debit;
+          }
+        }
+      }
+    }
+
+    // Recalculate running balance for filtered transactions
+    double runningBalance = startingBalance;
+    for (int i = 0; i < _filteredTransactions.length; i++) {
+      final debit = (_filteredTransactions[i]['debit'] ?? 0.0).toDouble();
+      final credit = (_filteredTransactions[i]['credit'] ?? 0.0).toDouble();
+      runningBalance = runningBalance + credit - debit;
+      _filteredTransactions[i]['balance'] = runningBalance;
+    }
+  }
+
+  void _calculateReport(List<Map<String, dynamic>> transactionsList) {
+    double totalDebit = 0.0;
+    double totalCredit = openingBalance; // Include opening balance
+    double finalBalance = openingBalance;
+
+    for (var transaction in transactionsList) {
+      final debit = (transaction['debit'] ?? 0.0).toDouble();
+      final credit = (transaction['credit'] ?? 0.0).toDouble();
+
+      totalDebit += debit;
+      totalCredit += credit;
+    }
+
+    // Calculate final balance
+    if (transactionsList.isNotEmpty) {
+      finalBalance = transactionsList.last['balance'] ?? openingBalance;
+    }
+
+    report = {
+      'debit': totalDebit,
+      'credit': totalCredit - openingBalance, // Subtract opening balance for display
+      'balance': finalBalance,
+      'openingBalance': openingBalance,
+    };
+  }
 
   void toggleTransactionExpansion(String transactionKey) {
     if (expandedTransactions.contains(transactionKey)) {
@@ -300,9 +509,10 @@ class FilledCustomerReportProvider with ChangeNotifier {
       notifyListeners();
 
       report = {};
-      transactions = [];
-      expandedTransactions.clear(); // Clear expanded state
-      invoiceItems.clear(); // Clear cached items
+      _allTransactions = [];
+      _filteredTransactions = [];
+      expandedTransactions.clear();
+      invoiceItems.clear();
 
       // Fetch opening balance first
       await fetchOpeningBalance(customerId);
@@ -312,9 +522,7 @@ class FilledCustomerReportProvider with ChangeNotifier {
       if (snapshot.snapshot.exists) {
         final data = Map<String, dynamic>.from(snapshot.snapshot.value as Map);
 
-        double totalDebit = 0.0;
-        double totalCredit = openingBalance; // Start with opening balance as credit
-        double runningBalance = openingBalance; // Start balance with opening balance
+        List<Map<String, dynamic>> tempTransactions = [];
 
         for (var entry in data.entries) {
           final transaction = Map<String, dynamic>.from(entry.value);
@@ -328,51 +536,70 @@ class FilledCustomerReportProvider with ChangeNotifier {
           final debit = (transaction['debitAmount'] ?? 0.0).toDouble();
           final credit = (transaction['creditAmount'] ?? 0.0).toDouble();
 
-          runningBalance += credit - debit;
+          // Store the original createdAt value and also create a standardized date field
+          final originalDate = transaction['createdAt'];
+          final parsedDate = _parseFirebaseDate(originalDate);
+          final dateString = parsedDate != null ? parsedDate.toIso8601String() : originalDate?.toString() ?? '';
 
-          transactions.add({
+          tempTransactions.add({
             'id': entry.key,
-            'key': entry.key, // Add key field for expansion tracking
-            'date': transaction['createdAt'] ?? 'N/A',
+            'key': entry.key,
+            'date': dateString, // Standardized date format
+            'originalDate': originalDate, // Keep original for debugging
             'details': transaction['details'] ?? '',
             'filledNumber': transaction['filledNumber'] ?? '',
             'referenceNumber': transaction['referenceNumber'] ?? '',
-            'filledId': transaction['filledId'] ?? transaction['referenceNumber'] ?? '', // Store filledId
+            'filledId': transaction['filledId'] ?? transaction['referenceNumber'] ?? '',
             'bankName': transaction['bankName'] ?? '',
             'paymentMethod': paymentMethod ?? '',
             'debit': debit,
             'credit': credit,
-            'balance': runningBalance,
+            'balance': 0.0,
           });
-
-          totalDebit += debit;
-          totalCredit += credit;
         }
 
         // Sort transactions by date (ascending)
-        transactions.sort((a, b) {
-          final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(2000);
-          final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(2000);
-          return dateA.compareTo(dateB); // Oldest first
+        tempTransactions.sort((a, b) {
+          final dateA = _parseFirebaseDate(a['date']) ?? DateTime(2000);
+          final dateB = _parseFirebaseDate(b['date']) ?? DateTime(2000);
+          return dateA.compareTo(dateB);
         });
 
-        report = {
-          'debit': totalDebit,
-          'credit': totalCredit,
-          'balance': runningBalance,
-        };
+        // Calculate running balance after sorting
+        double runningBalance = openingBalance;
+        for (int i = 0; i < tempTransactions.length; i++) {
+          final debit = tempTransactions[i]['debit'] as double;
+          final credit = tempTransactions[i]['credit'] as double;
+          runningBalance = runningBalance + credit - debit;
+          tempTransactions[i]['balance'] = runningBalance;
+        }
+
+        _allTransactions = tempTransactions;
+
+        // Apply current date filter if exists
+        if (_dateRangeFilter != null) {
+          _applyDateFilter(_dateRangeFilter!);
+        } else {
+          _calculateReport(_allTransactions);
+        }
       } else {
-        // If no transactions, balance is just the opening balance
         report = {
           'debit': 0.0,
-          'credit': openingBalance,
-          'balance': openingBalance
+          'credit': 0.0,
+          'balance': openingBalance,
+          'openingBalance': openingBalance,
         };
       }
     } catch (e) {
       error = 'Failed to fetch customer report: $e';
-      report = {'debit': 0.0, 'credit': openingBalance, 'balance': openingBalance};
-      transactions = [];
+      report = {
+        'debit': 0.0,
+        'credit': 0.0,
+        'balance': openingBalance,
+        'openingBalance': openingBalance,
+      };
+      _allTransactions = [];
+      _filteredTransactions = [];
     } finally {
       isLoading = false;
       notifyListeners();
