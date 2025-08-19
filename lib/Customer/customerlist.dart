@@ -985,93 +985,159 @@ class _CustomerListState extends State<CustomerList> {
         text: customer.openingBalance!.toStringAsFixed(2)
     );
 
+    // Initialize date with existing date or current date
+    DateTime editOpeningBalanceDate = customer.openingBalanceDate ?? DateTime.now();
+
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(
-            languageProvider.isEnglish ? 'Edit Customer' : 'کسٹمر میں ترمیم کریں',
-            style: TextStyle(color: Colors.orange.shade800),
-          ),
-          backgroundColor: Colors.orange.shade50,
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Name' : 'نام',
-                      labelStyle: TextStyle(color: Colors.orange.shade600)
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                languageProvider.isEnglish ? 'Edit Customer' : 'کسٹمر میں ترمیم کریں',
+                style: TextStyle(color: Colors.orange.shade800),
+              ),
+              backgroundColor: Colors.orange.shade50,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish ? 'Name' : 'نام',
+                          labelStyle: TextStyle(color: Colors.orange.shade600)
+                      ),
+                    ),
+                    TextField(
+                      controller: addressController,
+                      decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish ? 'Address' : 'پتہ',
+                          labelStyle: TextStyle(color: Colors.orange.shade600)
+                      ),
+                    ),
+                    TextField(
+                      controller: cityController,
+                      decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish ? 'City' : 'شہر',
+                          labelStyle: TextStyle(color: Colors.orange.shade600)
+                      ),
+                    ),
+                    TextField(
+                      controller: phoneController,
+                      decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish ? 'Phone' : 'فون',
+                          labelStyle: TextStyle(color: Colors.orange.shade600)
+                      ),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    TextField(
+                      controller: balanceController,
+                      decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish
+                              ? 'Opening Balance'
+                              : 'ابتدائی بیلنس',
+                          labelStyle: TextStyle(color: Colors.orange.shade600)
+                      ),
+                      keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    ),
+
+                    // Opening Balance Date/Time Selector
+                    SizedBox(height: 16),
+                    Card(
+                      elevation: 2,
+                      child: ListTile(
+                        leading: Icon(Icons.calendar_today, color: Colors.orange.shade600),
+                        title: Text(
+                          languageProvider.isEnglish
+                              ? 'Opening Balance Date & Time'
+                              : 'ابتدائی بیلنس کی تاریخ اور وقت',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange.shade600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          DateFormat('dd/MM/yyyy - HH:mm').format(editOpeningBalanceDate),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                        trailing: Icon(Icons.edit, color: Colors.orange.shade600),
+                        onTap: () async {
+                          // First pick date
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: editOpeningBalanceDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+
+                          if (pickedDate != null) {
+                            // Then pick time
+                            final pickedTime = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay.fromDateTime(editOpeningBalanceDate),
+                            );
+
+                            if (pickedTime != null) {
+                              setState(() {
+                                editOpeningBalanceDate = DateTime(
+                                  pickedDate.year,
+                                  pickedDate.month,
+                                  pickedDate.day,
+                                  pickedTime.hour,
+                                  pickedTime.minute,
+                                );
+                              });
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                      languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں',
+                      style: TextStyle(color: Colors.orange.shade800)
                   ),
                 ),
-                TextField(
-                  controller: addressController,
-                  decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Address' : 'پتہ',
-                      labelStyle: TextStyle(color: Colors.orange.shade600)
+                ElevatedButton(
+                  onPressed: () {
+                    final openingBalance = double.tryParse(balanceController.text) ?? 0.0;
+                    customerProvider.updateCustomer(
+                        customer.id,
+                        nameController.text,
+                        addressController.text,
+                        phoneController.text,
+                        cityController.text,
+                        openingBalance,
+                        editOpeningBalanceDate // Pass the selected date/time
+                    );
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    languageProvider.isEnglish ? 'Save' : 'محفوظ کریں',
+                    style: TextStyle(color: Colors.white),
                   ),
-                ),
-                TextField(
-                  controller: cityController,
-                  decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'City' : 'شہر',
-                      labelStyle: TextStyle(color: Colors.orange.shade600)
-                  ),
-                ),
-                TextField(
-                  controller: phoneController,
-                  decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Phone' : 'فون',
-                      labelStyle: TextStyle(color: Colors.orange.shade600)
-                  ),
-                  keyboardType: TextInputType.phone,
-                ),
-                TextField(
-                  controller: balanceController,
-                  decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish
-                          ? 'Opening Balance'
-                          : 'ابتدائی بیلنس',
-                      labelStyle: TextStyle(color: Colors.orange.shade600)
-                  ),
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade300),
                 ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                  languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں',
-                  style: TextStyle(color: Colors.orange.shade800)
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final openingBalance = double.tryParse(balanceController.text) ?? 0.0;
-                customerProvider.updateCustomer(
-                    customer.id,
-                    nameController.text,
-                    addressController.text,
-                    phoneController.text,
-                    cityController.text,
-                    openingBalance
-                );
-                Navigator.pop(context);
-              },
-              child: Text(
-                languageProvider.isEnglish ? 'Save' : 'محفوظ کریں',
-                style: TextStyle(color: Colors.white),
-              ),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade300),
-            ),
-          ],
+            );
+          },
         );
       },
     );
   }
+
+
+
 }

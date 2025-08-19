@@ -7,9 +7,18 @@ class Customer {
   final String address;
   final String phone;
   final String city;
-  final double? openingBalance; // Add this field
+  final double? openingBalance;
+  final DateTime? openingBalanceDate; // Add this field
 
-  Customer({required this.id, required this.name, required this.address, required this.phone,required this.city, this.openingBalance});
+  Customer({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.phone,
+    required this.city,
+    this.openingBalance,
+    this.openingBalanceDate, // Add this parameter
+  });
 
   Map<String, dynamic> toJson() {
     return {
@@ -17,8 +26,8 @@ class Customer {
       'address': address,
       'phone': phone,
       'city': city,
-      'openingBalance': openingBalance??0.0, // Include in JSON
-
+      'openingBalance': openingBalance ?? 0.0,
+      'openingBalanceDate': openingBalanceDate?.toIso8601String(), // Include in JSON
     };
   }
 
@@ -29,8 +38,10 @@ class Customer {
       address: data['address'] ?? '',
       phone: data['phone'] ?? '',
       city: data['city'] ?? '',
-      openingBalance: (data['openingBalance'] as num?)?.toDouble(), // Handle null
-
+      openingBalance: (data['openingBalance'] as num?)?.toDouble(),
+      openingBalanceDate: data['openingBalanceDate'] != null
+          ? DateTime.tryParse(data['openingBalanceDate'])
+          : null, // Handle null and parse date
     );
   }
 }
@@ -49,15 +60,28 @@ class CustomerProvider with ChangeNotifier {
     }
   }
 
-
-  Future<void> addCustomer(String name, String address, String phone, String city, [double openingBalance = 0.0]) async {
+  Future<void> addCustomer(String name, String address, String phone, String city, [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
     final newCustomer = _dbRef.push();
-    await newCustomer.set({'name': name, 'address': address, 'phone': phone,'city':city,'openingBalance': openingBalance});
+    await newCustomer.set({
+      'name': name,
+      'address': address,
+      'phone': phone,
+      'city': city,
+      'openingBalance': openingBalance,
+      'openingBalanceDate': (openingBalanceDate ?? DateTime.now()).toIso8601String(), // Save date/time
+    });
     fetchCustomers(); // Refresh customer list
   }
 
-  Future<void> updateCustomer(String id, String name, String address, String phone,String city, [double openingBalance = 0.0]) async {
-    await _dbRef.child(id).update({'name': name, 'address': address, 'phone': phone, 'city': city,'openingBalance': openingBalance});
+  Future<void> updateCustomer(String id, String name, String address, String phone, String city, [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
+    await _dbRef.child(id).update({
+      'name': name,
+      'address': address,
+      'phone': phone,
+      'city': city,
+      'openingBalance': openingBalance,
+      'openingBalanceDate': openingBalanceDate?.toIso8601String(), // Update date/time if provided
+    });
     fetchCustomers(); // Refresh list
   }
 
@@ -75,5 +99,4 @@ class CustomerProvider with ChangeNotifier {
       throw e;
     }
   }
-
 }

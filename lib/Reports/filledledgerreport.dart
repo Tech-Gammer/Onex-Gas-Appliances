@@ -254,7 +254,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           header: (context) => _buildPDFHeader(languageProvider, customerNameImage, phoneNumberImage,reportProvider,dateRangeFilter),
           footer: (context) => _buildPDFFooter(context),
           build: (context) => [
-            _buildPDFSummary(report),
             pw.SizedBox(height: 20),
             _buildPDFTransactionTable(
               transactionsWithBalance,
@@ -368,34 +367,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-  pw.Widget _buildPDFSummary(Map<String, dynamic> report) {
-    return pw.Container(
-      padding: pw.EdgeInsets.all(15),
-      decoration: pw.BoxDecoration(
-        color: PdfColors.orange50,
-        border: pw.Border.all(color: PdfColors.orange200),
-        borderRadius: pw.BorderRadius.circular(8),
-      ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-        children: [
-          _buildPDFSummaryCard('Total Debit', 'Rs ${(report['debit'] ?? 0).toStringAsFixed(2)}', PdfColors.red),
-          _buildPDFSummaryCard('Total Credit', 'Rs ${(report['credit'] ?? 0).toStringAsFixed(2)}', PdfColors.green),
-          _buildPDFSummaryCard('Net Balance', 'Rs ${(report['balance'] ?? 0).toStringAsFixed(2)}', PdfColors.orange700),
-        ],
-      ),
-    );
-  }
-
-  pw.Widget _buildPDFSummaryCard(String title, String value, PdfColor color) {
-    return pw.Column(
-      children: [
-        pw.Text(title, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: color)),
-        pw.SizedBox(height: 5),
-        pw.Text(value, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-      ],
-    );
-  }
 
   pw.Widget _buildPDFTransactionTable(
       List<Map<String, dynamic>> transactions,
@@ -446,6 +417,9 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 7: pw.FixedColumnWidth(60),  // Balance
               },
               children: [
+
+
+
                 // Only show header for first transaction
                 if (transaction == transactions.first) ...[
                   pw.TableRow(
@@ -459,6 +433,24 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       _buildPdfTableCell(languageProvider.isEnglish ? 'Debit' : 'Debit', isHeader: true),
                       _buildPdfTableCell(languageProvider.isEnglish ? 'Credit' : 'Credit', isHeader: true),
                       _buildPdfTableCell(languageProvider.isEnglish ? 'Balance' : 'Balance', isHeader: true),
+                    ],
+                  ),
+                  // Opening Balance row
+                  pw.TableRow(
+                    children: [
+                      _buildPdfTableCell(reportProvider.openingBalanceDate != null
+                          ? DateFormat('dd/MM/yy').format(reportProvider.openingBalanceDate!)
+                          : '-'),
+                      _buildPdfTableCell(languageProvider.isEnglish ? 'Opening Balance' : 'Opening Balance'),
+                      _buildPdfTableCell('-'),
+                      _buildPdfTableCell('-'),
+                      _buildPdfTableCell('-'),
+                      _buildPdfTableCell('-'),
+                      _buildPdfTableCell('-'),
+                      _buildPdfTableCell(
+                        'Rs ${(report['openingBalance'] ?? 0).toStringAsFixed(2)}',
+                        color: (report['openingBalance'] ?? 0) > 0 ? PdfColors.green : PdfColors.red,
+                      ),
                     ],
                   ),
                 ],
@@ -1113,36 +1105,34 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Opening Balance Card (if > 0)
-            if (openingBalance > 0)
-              Card(
-                margin: EdgeInsets.only(bottom: 10),
-                color: Colors.grey[100],
-                child: Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        languageProvider.isEnglish ? 'Opening Balance' : 'ابتدائی بیلنس',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        'Rs ${openingBalance.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
+            // if (openingBalance > 0)
+            //   Card(
+            //     margin: EdgeInsets.only(bottom: 10),
+            //     color: Colors.grey[100],
+            //     child: Padding(
+            //       padding: EdgeInsets.all(12),
+            //       child: Row(
+            //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //         children: [
+            //           Text(
+            //             languageProvider.isEnglish ? 'Opening Balance' : 'ابتدائی بیلنس',
+            //             style: TextStyle(
+            //               fontWeight: FontWeight.bold,
+            //               fontSize: 16,
+            //             ),
+            //           ),
+            //           Text(
+            //             'Rs ${openingBalance.toStringAsFixed(2)}',
+            //             style: TextStyle(
+            //               fontSize: 16,
+            //               color: Colors.green,
+            //               fontWeight: FontWeight.bold,
+            //             ),
+            //           ),
+            //         ],
+            //       ),
+            //     ),
+            //   ),
             // Custom Table with inline invoice items
             _buildCustomTransactionTable(transactions, reportProvider, isMobile, languageProvider),
           ],
@@ -1159,6 +1149,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       LanguageProvider languageProvider,
       )
   {
+    final openingBalance = reportProvider.openingBalance ?? 0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1185,7 +1177,72 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           ),
         ),
 
-        // Table Rows with inline invoice items
+        // Opening Balance Row
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            border: Border(
+              bottom: BorderSide(color: Colors.grey[300]!),
+              left: BorderSide(color: Colors.grey[300]!),
+              right: BorderSide(color: Colors.grey[300]!),
+            ),
+          ),
+          child: SingleChildScrollView  (
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildDataCell(
+                  reportProvider.openingBalanceDate != null
+                      ? DateFormat('dd MMM yyyy').format(reportProvider.openingBalanceDate!)
+                      : '-',
+                  120,
+                  isMobile,
+                ),
+                _buildDataCell(
+                  languageProvider.isEnglish ? 'Opening Balance' : 'ابتدائی بیلنس',
+                  120,
+                  isMobile,
+                ),
+                _buildDataCell(
+                  '-',
+                  100,
+                  isMobile,
+                ),
+                _buildDataCell(
+                  '-',
+                  120,
+                  isMobile,
+                ),
+                _buildDataCell(
+                  '-',
+                  150,
+                  isMobile,
+                ),
+                _buildDataCell(
+                  '-',
+                  100,
+                  isMobile,
+                ),
+                _buildDataCell(
+                  'Rs ${openingBalance.toStringAsFixed(2)}',
+                  100,
+                  isMobile,
+                  fontWeight: FontWeight.bold,
+                  textColor: openingBalance > 0 ? Colors.green : Colors.red,
+                ),
+                _buildDataCell(
+                  'Rs ${openingBalance.toStringAsFixed(2)}',
+                  100,
+                  isMobile,
+                  fontWeight: FontWeight.bold,
+                  textColor: openingBalance > 0 ? Colors.green : Colors.red,
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Transaction Rows with inline invoice items
         ...transactions.expand((transaction) {
           List<Widget> rowWidgets = [];
 

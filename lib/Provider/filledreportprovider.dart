@@ -21,6 +21,7 @@ class FilledCustomerReportProvider with ChangeNotifier {
   // Fixed getter to return proper transactions list
   List<Map<String, dynamic>> get transactions =>
       _dateRangeFilter == null ? _allTransactions : _filteredTransactions;
+  DateTime? openingBalanceDate;
 
   void setDateRangeFilter(DateTimeRange? range) {
     _dateRangeFilter = range;
@@ -608,15 +609,28 @@ class FilledCustomerReportProvider with ChangeNotifier {
 
   Future<void> fetchOpeningBalance(String customerId) async {
     try {
-      final snapshot = await _db.child('customers/$customerId/openingBalance').once();
+      final snapshot = await _db.child('customers/$customerId').once();
       if (snapshot.snapshot.exists && snapshot.snapshot.value != null) {
-        openingBalance = (snapshot.snapshot.value as num).toDouble();
+        final customerData = Map<String, dynamic>.from(snapshot.snapshot.value as Map);
+        openingBalance = (customerData['openingBalance'] ?? 0).toDouble();
+
+        // Get the opening balance date if it exists
+        if (customerData.containsKey('openingBalanceDate')) {
+          openingBalanceDate = _parseFirebaseDate(customerData['openingBalanceDate']);
+        } else {
+          // Default to current date if no date is stored
+          openingBalanceDate = DateTime.now();
+        }
       } else {
         openingBalance = 0.0;
+        openingBalanceDate = DateTime.now();
       }
     } catch (e) {
       print('Error fetching opening balance: $e');
       openingBalance = 0.0;
+      openingBalanceDate = DateTime.now();
     }
   }
+
+
 }

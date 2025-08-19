@@ -1,152 +1,6 @@
-// import 'package:flutter/material.dart';
-// import 'package:provider/provider.dart';
-// import '../Provider/customerprovider.dart';
-// import '../Provider/lanprovider.dart';
-//
-// class AddCustomer extends StatefulWidget {
-//   @override
-//   State<AddCustomer> createState() => _AddCustomerState();
-// }
-//
-// class _AddCustomerState extends State<AddCustomer> {
-//   final _formKey = GlobalKey<FormState>();
-//   String _name = '';
-//   String _address = '';
-//   String _phone = '';
-//   String _city = '';
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final languageProvider = Provider.of<LanguageProvider>(context);
-//
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text(
-//             // 'Add Customer',
-//             languageProvider.isEnglish ? 'Add Customer' : 'کسٹمر شامل کریں۔',
-//             style: TextStyle(color: Colors.white)),
-//         backgroundColor: Colors.orange[300],
-//         centerTitle: true,
-//       ),
-//       body: Padding(
-//         padding: const EdgeInsets.all(16.0),
-//         child: Form(
-//           key: _formKey,
-//           child: Column(
-//             crossAxisAlignment: CrossAxisAlignment.start,
-//             children: [
-//               Text(
-//                 // 'Customer Details',
-//                 languageProvider.isEnglish ? 'Customer Details' : 'کسٹمر کی تفصیلات',
-//
-//                 style: TextStyle(
-//                   fontSize: 24,
-//                   fontWeight: FontWeight.bold,
-//                   color: Colors.orange[300],
-//                 ),
-//               ),
-//               SizedBox(height: 20),
-//               TextFormField(
-//                 decoration: InputDecoration(
-//                   labelText: languageProvider.isEnglish ? 'Name' : 'نام',
-//
-//                   labelStyle: TextStyle(color: Colors.orange[300]),
-//                   border: OutlineInputBorder(),
-//                   focusedBorder: OutlineInputBorder(
-//                     borderSide: BorderSide(color: Colors.orange),
-//                   ),
-//                 ),
-//                 onSaved: (value) => _name = value!,
-//                 validator: (value) =>
-//                 value!.isEmpty ? 'Please enter the customer\'s name' : null,
-//               ),
-//               SizedBox(height: 16),
-//               TextFormField(
-//                 decoration: InputDecoration(
-//                   labelText:  languageProvider.isEnglish ? 'Address' : 'پتہ',
-//                   labelStyle: TextStyle(color: Colors.orange[300]),
-//                   border: OutlineInputBorder(),
-//                   focusedBorder: OutlineInputBorder(
-//                     borderSide: BorderSide(color: Colors.orange),
-//                   ),
-//                 ),
-//                 onSaved: (value) => _address = value!,
-//                 validator: (value) =>
-//                 value!.isEmpty ? 'Please enter the customer\'s address' : null,
-//               ),
-//               // 🆕 City
-//               TextFormField(
-//                 decoration: InputDecoration(
-//                   labelText: languageProvider.isEnglish ? 'City' : 'شہر',
-//                   labelStyle: TextStyle(color: Colors.orange[300]),
-//                   border: OutlineInputBorder(),
-//                   focusedBorder: OutlineInputBorder(
-//                     borderSide: BorderSide(color: Colors.orange),
-//                   ),
-//                 ),
-//                 onSaved: (value) => _city = value!,
-//                 validator: (value) =>
-//                 value!.isEmpty ? 'Please enter the customer\'s city' : null,
-//               ),
-//               SizedBox(height: 16),
-//               TextFormField(
-//                 decoration: InputDecoration(
-//                   labelText: languageProvider.isEnglish ? 'ُPhone Number' : 'موبائل نمبر',
-//                   labelStyle: TextStyle(color: Colors.orange[300]),
-//                   border: OutlineInputBorder(),
-//                   focusedBorder: OutlineInputBorder(
-//                     borderSide: BorderSide(color: Colors.orange),
-//                   ),
-//                 ),
-//                 keyboardType: TextInputType.phone,
-//                 onSaved: (value) => _phone = value!,
-//                 validator: (value) {
-//                   if (value!.isEmpty) return 'Please enter the customer\'s phone number';
-//                   if (!RegExp(r'^[0-9]{10,15}$').hasMatch(value)) return 'Please enter a valid phone number';
-//                   return null;
-//                 },
-//               ),
-//               SizedBox(height: 20),
-//               Align(
-//                 alignment: Alignment.center,
-//                 child: ElevatedButton(
-//                   style: ElevatedButton.styleFrom(
-//                     backgroundColor: Colors.orange[300],
-//                     padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 40),
-//                     shape: RoundedRectangleBorder(
-//                       borderRadius: BorderRadius.circular(10),
-//                     ),
-//                   ),
-//                   onPressed: () => _saveCustomer(context),
-//                   child: Text(
-//                     // 'Save',
-//                     languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔',
-//
-//                     style: const TextStyle(
-//                     fontSize: 18,
-//                     color: Colors.white,
-//                     fontWeight: FontWeight.bold,
-//                   ),),
-//
-//                 ),
-//               ),
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-//
-//   void _saveCustomer(BuildContext context) {
-//     if (_formKey.currentState!.validate()) {
-//       _formKey.currentState!.save();
-//       Provider.of<CustomerProvider>(context, listen: false).addCustomer(_name, _address, _phone,_city);
-//       Navigator.pop(context);
-//     }
-//   }
-// }
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../Provider/customerprovider.dart';
 import '../Provider/lanprovider.dart';
 
@@ -163,6 +17,9 @@ class _AddCustomerState extends State<AddCustomer> {
   final _cityController = TextEditingController();
   final _balanceController = TextEditingController(text: '0.00');
 
+  // Add date/time for opening balance
+  DateTime _openingBalanceDate = DateTime.now();
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -171,6 +28,38 @@ class _AddCustomerState extends State<AddCustomer> {
     _cityController.dispose();
     _balanceController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectDateTime(BuildContext context) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    // First pick date
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _openingBalanceDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+
+    if (pickedDate != null) {
+      // Then pick time
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(_openingBalanceDate),
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          _openingBalanceDate = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+        });
+      }
+    }
   }
 
   @override
@@ -311,6 +200,34 @@ class _AddCustomerState extends State<AddCustomer> {
                     return null;
                   },
                 ),
+                SizedBox(height: 16),
+
+                // Opening Balance Date/Time Field
+                Card(
+                  elevation: 2,
+                  child: ListTile(
+                    leading: Icon(Icons.calendar_today, color: Colors.orange[300]),
+                    title: Text(
+                      languageProvider.isEnglish
+                          ? 'Opening Balance Date & Time'
+                          : 'ابتدائی بیلنس کی تاریخ اور وقت',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.orange[300],
+                      ),
+                    ),
+                    subtitle: Text(
+                      DateFormat('dd/MM/yyyy - HH:mm').format(_openingBalanceDate),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.orange[600],
+                      ),
+                    ),
+                    trailing: Icon(Icons.edit, color: Colors.orange[300]),
+                    onTap: () => _selectDateTime(context),
+                  ),
+                ),
+
                 SizedBox(height: 20),
                 // Save Button
                 Align(
@@ -351,6 +268,7 @@ class _AddCustomerState extends State<AddCustomer> {
         _phoneController.text,
         _cityController.text,
         openingBalance,
+        _openingBalanceDate, // Pass the selected date/time
       );
       Navigator.pop(context);
     }
