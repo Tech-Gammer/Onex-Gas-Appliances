@@ -60,29 +60,100 @@ class CustomerProvider with ChangeNotifier {
     }
   }
 
-  Future<void> addCustomer(String name, String address, String phone, String city, [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
+
+  Future<void> addCustomer(String name, String address, String phone, String city,
+      [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
     final newCustomer = _dbRef.push();
+    final customerId = newCustomer.key!;
+
     await newCustomer.set({
       'name': name,
       'address': address,
       'phone': phone,
       'city': city,
-      'openingBalance': openingBalance,
-      'openingBalanceDate': (openingBalanceDate ?? DateTime.now()).toIso8601String(), // Save date/time
+       'openingBalance': openingBalance,
+       'openingBalanceDate': (openingBalanceDate ?? DateTime.now()).toIso8601String(),
     });
+
+    // Add opening balance to ledger as credit
+    if (openingBalance > 0) {
+      await _addOpeningBalanceToLedger(
+        customerId,
+        openingBalance,
+        openingBalanceDate ?? DateTime.now(),
+      );
+    }
+
     fetchCustomers(); // Refresh customer list
   }
 
-  Future<void> updateCustomer(String id, String name, String address, String phone, String city, [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
+  Future<void> _addOpeningBalanceToLedger(
+      String customerId,
+      double openingBalance,
+      DateTime date
+      ) async {
+    final ledgerRef = FirebaseDatabase.instance.ref().child('filledledger').child(customerId);
+
+    final ledgerData = {
+      'referenceNumber': 'Opening Balance',
+      'filledNumber': 'OPENING_BAL',
+      'creditAmount': openingBalance,
+      'debitAmount': 0.0,
+      'remainingBalance': openingBalance, // Initial balance
+      'createdAt': date.toIso8601String(),
+      'paymentMethod': 'Opening Balance',
+      'description': 'Opening Balance Credit',
+    };
+
+    await ledgerRef.push().set(ledgerData);
+  }
+
+  Future<void> updateCustomer(String id, String name, String address, String phone, String city,
+      [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
+
+    // Update customer node
     await _dbRef.child(id).update({
       'name': name,
       'address': address,
       'phone': phone,
       'city': city,
       'openingBalance': openingBalance,
-      'openingBalanceDate': openingBalanceDate?.toIso8601String(), // Update date/time if provided
+      'openingBalanceDate': openingBalanceDate?.toIso8601String(),
     });
+
+    // Update opening balance in filledledger
+    await _updateOpeningBalanceInLedger(id, openingBalance, openingBalanceDate);
+
     fetchCustomers(); // Refresh list
+  }
+
+  Future<void> _updateOpeningBalanceInLedger(
+      String customerId,
+      double openingBalance,
+      DateTime? date) async {
+    final ledgerRef = FirebaseDatabase.instance.ref().child('filledledger').child(customerId);
+
+    // First, try to find the existing opening balance entry
+    final snapshot = await ledgerRef.orderByChild('filledNumber').equalTo('OPENING_BAL').once();
+
+    if (snapshot.snapshot.exists) {
+      // Update existing opening balance entry
+      final Map<dynamic, dynamic> entries = snapshot.snapshot.value as Map<dynamic, dynamic>;
+      final String entryKey = entries.keys.first;
+
+      await ledgerRef.child(entryKey).update({
+        'creditAmount': openingBalance,
+        'remainingBalance': openingBalance,
+        'createdAt': date?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      });
+    } else {
+      // Create new opening balance entry if it doesn't exist
+      await _addOpeningBalanceToLedger(
+        customerId,
+        openingBalance,
+        date ?? DateTime.now(),
+      );
+    }
   }
 
   Future<void> deleteCustomer(String id) async {

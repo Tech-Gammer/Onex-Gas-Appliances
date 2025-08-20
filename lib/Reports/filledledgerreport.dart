@@ -197,7 +197,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     return pw.MemoryImage(buffer);
   }
 
-  Future<void> _generateAndPrintPDF(
+  Future<void> _generateAndPrintPDF (
       Map<String, dynamic> report,
       List<Map<String, dynamic>> transactions,
       bool isShare,
@@ -291,10 +291,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       DateTimeRange? dateRangeFilter,
       )
   {
-    // Add debug print
-    print('PDF Header - Date Range Filter: ${reportProvider.dateRangeFilter}');
-    print('PDF Header - Is Filtered: ${reportProvider.isFiltered}');
-
     return pw.Container(
       padding: pw.EdgeInsets.only(bottom: 20),
       decoration: pw.BoxDecoration(
@@ -384,7 +380,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 10),
-
         // Create separate widgets for each transaction and its invoice items
         ...transactions.expand((transaction) {
           List<pw.Widget> rowWidgets = [];
@@ -417,9 +412,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 7: pw.FixedColumnWidth(60),  // Balance
               },
               children: [
-
-
-
                 // Only show header for first transaction
                 if (transaction == transactions.first) ...[
                   pw.TableRow(
@@ -436,17 +428,46 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                     ],
                   ),
                   // Opening Balance row
+                  // pw.TableRow(
+                  //   children: [
+                  //     _buildPdfTableCell(
+                  //
+                  //       reportProvider.openingBalanceDate != null
+                  //           ? DateFormat('dd MMM yyyy').format(reportProvider.openingBalanceDate!)
+                  //           : '-',
+                  //     ),
+                  //     _buildPdfTableCell(languageProvider.isEnglish ? 'Opening Balance' : 'Opening Balance'),
+                  //     _buildPdfTableCell('-'),
+                  //     _buildPdfTableCell('-'),
+                  //     _buildPdfTableCell('-'),
+                  //     _buildPdfTableCell('-'),
+                  //     _buildPdfTableCell(
+                  //       'Rs ${(report['openingBalance'] ?? 0).toStringAsFixed(2)}',
+                  //       color: (report['openingBalance'] ?? 0) > 0 ? PdfColors.green : PdfColors.red,
+                  //     ),
+                  //     _buildPdfTableCell(
+                  //       'Rs ${(report['openingBalance'] ?? 0).toStringAsFixed(2)}',
+                  //       color: (report['openingBalance'] ?? 0) > 0 ? PdfColors.green : PdfColors.red,
+                  //     ),
+                  //   ],
+                  // ),
+                  // Opening Balance row
                   pw.TableRow(
                     children: [
-                      _buildPdfTableCell(reportProvider.openingBalanceDate != null
-                          ? DateFormat('dd/MM/yy').format(reportProvider.openingBalanceDate!)
-                          : '-'),
+                      _buildPdfTableCell(
+                        reportProvider.openingBalanceDate != null
+                            ? DateFormat('dd MMM yyyy').format(reportProvider.openingBalanceDate!)
+                            : '-',
+                      ),
                       _buildPdfTableCell(languageProvider.isEnglish ? 'Opening Balance' : 'Opening Balance'),
                       _buildPdfTableCell('-'),
                       _buildPdfTableCell('-'),
                       _buildPdfTableCell('-'),
                       _buildPdfTableCell('-'),
-                      _buildPdfTableCell('-'),
+                      _buildPdfTableCell(
+                        'Rs ${(report['openingBalance'] ?? 0).toStringAsFixed(2)}',
+                        color: (report['openingBalance'] ?? 0) > 0 ? PdfColors.green : PdfColors.red,
+                      ),
                       _buildPdfTableCell(
                         'Rs ${(report['openingBalance'] ?? 0).toStringAsFixed(2)}',
                         color: (report['openingBalance'] ?? 0) > 0 ? PdfColors.green : PdfColors.red,
@@ -458,7 +479,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 // Transaction row
                 pw.TableRow(
                   children: [
-                    _buildPdfTableCell(DateFormat('dd/MM/yy').format(date)),
+                    // _buildPdfTableCell(DateFormat('dd/MM/yy').format(date)),
+                     _buildPdfTableCell(DateFormat('dd MMM yyyy').format(date)),
                     _buildPdfTableCell(details.length > 20 ? '${details.substring(0, 17)}...' : details),
                     _buildPdfTableCell(isInvoice ? 'Invoice' : 'Payment'),
                     _buildPdfTableCell(_getPaymentMethodText(paymentMethod, languageProvider)),
@@ -1105,35 +1127,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // if (openingBalance > 0)
-            //   Card(
-            //     margin: EdgeInsets.only(bottom: 10),
-            //     color: Colors.grey[100],
-            //     child: Padding(
-            //       padding: EdgeInsets.all(12),
-            //       child: Row(
-            //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            //         children: [
-            //           Text(
-            //             languageProvider.isEnglish ? 'Opening Balance' : 'ابتدائی بیلنس',
-            //             style: TextStyle(
-            //               fontWeight: FontWeight.bold,
-            //               fontSize: 16,
-            //             ),
-            //           ),
-            //           Text(
-            //             'Rs ${openingBalance.toStringAsFixed(2)}',
-            //             style: TextStyle(
-            //               fontSize: 16,
-            //               color: Colors.green,
-            //               fontWeight: FontWeight.bold,
-            //             ),
-            //           ),
-            //         ],
-            //       ),
-            //     ),
-            //   ),
-            // Custom Table with inline invoice items
             _buildCustomTransactionTable(transactions, reportProvider, isMobile, languageProvider),
           ],
         );
@@ -1242,14 +1235,11 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           ),
         ),
 
-        // Transaction Rows with inline invoice items
         ...transactions.expand((transaction) {
           List<Widget> rowWidgets = [];
 
-          // Add the main transaction row
           rowWidgets.add(_buildTransactionRow(transaction, reportProvider, isMobile, languageProvider));
 
-          // Add invoice items right after this row if it's expanded
           final isInvoice = (transaction['credit'] ?? 0) != 0;
           final transactionKey = transaction['key']?.toString() ?? '';
           final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);

@@ -5,6 +5,10 @@ import '../Provider/customerprovider.dart';
 import '../Provider/lanprovider.dart';
 
 class AddCustomer extends StatefulWidget {
+  final Customer? customer;
+
+  const AddCustomer({Key? key, this.customer}) : super(key: key);
+
   @override
   State<AddCustomer> createState() => _AddCustomerState();
 }
@@ -16,18 +20,23 @@ class _AddCustomerState extends State<AddCustomer> {
   final _phoneController = TextEditingController();
   final _cityController = TextEditingController();
   final _balanceController = TextEditingController(text: '0.00');
+  bool _isEditing = false;
 
-  // Add date/time for opening balance
   DateTime _openingBalanceDate = DateTime.now();
 
   @override
-  void dispose() {
-    _nameController.dispose();
-    _addressController.dispose();
-    _phoneController.dispose();
-    _cityController.dispose();
-    _balanceController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    // Initialize with customer data if provided
+    if (widget.customer != null) {
+      _isEditing = true;
+      _nameController.text = widget.customer!.name;
+      _addressController.text = widget.customer!.address;
+      _phoneController.text = widget.customer!.phone;
+      _cityController.text = widget.customer!.city;
+      _balanceController.text = widget.customer!.openingBalance?.toStringAsFixed(2) ?? '0.00';
+      _openingBalanceDate = widget.customer!.openingBalanceDate ?? DateTime.now();
+    }
   }
 
   Future<void> _selectDateTime(BuildContext context) async {
@@ -69,7 +78,9 @@ class _AddCustomerState extends State<AddCustomer> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            languageProvider.isEnglish ? 'Add Customer' : 'کسٹمر شامل کریں۔',
+            _isEditing
+                ? (languageProvider.isEnglish ? 'Edit Customer' : 'کسٹمر میں ترمیم کریں')
+                : (languageProvider.isEnglish ? 'Add Customer' : 'کسٹمر شامل کریں۔'),
             style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.orange[300],
         centerTitle: true,
@@ -83,7 +94,9 @@ class _AddCustomerState extends State<AddCustomer> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  languageProvider.isEnglish ? 'Customer Details' : 'کسٹمر کی تفصیلات',
+                  _isEditing
+                      ? (languageProvider.isEnglish ? 'Edit Customer Details' : 'کسٹمر کی تفصیلات میں ترمیم کریں')
+                      : (languageProvider.isEnglish ? 'Customer Details' : 'کسٹمر کی تفصیلات'),
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -242,7 +255,9 @@ class _AddCustomerState extends State<AddCustomer> {
                     ),
                     onPressed: () => _saveCustomer(context),
                     child: Text(
-                      languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔',
+                      _isEditing
+                          ? (languageProvider.isEnglish ? 'Update' : 'اپ ڈیٹ کریں')
+                          : (languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔'),
                       style: const TextStyle(
                         fontSize: 18,
                         color: Colors.white,
@@ -262,15 +277,41 @@ class _AddCustomerState extends State<AddCustomer> {
   void _saveCustomer(BuildContext context) {
     if (_formKey.currentState!.validate()) {
       final openingBalance = double.tryParse(_balanceController.text) ?? 0.0;
-      Provider.of<CustomerProvider>(context, listen: false).addCustomer(
-        _nameController.text,
-        _addressController.text,
-        _phoneController.text,
-        _cityController.text,
-        openingBalance,
-        _openingBalanceDate, // Pass the selected date/time
-      );
+      final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+
+      if (_isEditing) {
+        // Update existing customer
+        customerProvider.updateCustomer(
+          widget.customer!.id,
+          _nameController.text,
+          _addressController.text,
+          _phoneController.text,
+          _cityController.text,
+          openingBalance,
+          _openingBalanceDate,
+        );
+      } else {
+        // Add new customer
+        customerProvider.addCustomer(
+          _nameController.text,
+          _addressController.text,
+          _phoneController.text,
+          _cityController.text,
+          openingBalance,
+          _openingBalanceDate,
+        );
+      }
       Navigator.pop(context);
     }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _addressController.dispose();
+    _phoneController.dispose();
+    _cityController.dispose();
+    _balanceController.dispose();
+    super.dispose();
   }
 }

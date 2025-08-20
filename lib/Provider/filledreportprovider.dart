@@ -18,7 +18,6 @@ class FilledCustomerReportProvider with ChangeNotifier {
   DateTimeRange? _dateRangeFilter;
   DateTimeRange? get dateRangeFilter => _dateRangeFilter;
   bool get isFiltered => _dateRangeFilter != null;
-  // Fixed getter to return proper transactions list
   List<Map<String, dynamic>> get transactions =>
       _dateRangeFilter == null ? _allTransactions : _filteredTransactions;
   DateTime? openingBalanceDate;
@@ -34,8 +33,6 @@ class FilledCustomerReportProvider with ChangeNotifier {
     }
     notifyListeners();
   }
-
-  // Replace your _applyDateFilter method in FilledCustomerReportProvider with this:
 
   void _applyDateFilter(DateTimeRange range) {
     print('Applying date filter from ${range.start} to ${range.end}');
@@ -81,7 +78,6 @@ class FilledCustomerReportProvider with ChangeNotifier {
     _calculateReport(_filteredTransactions);
   }
 
-// Also, update your _parseFirebaseDate method to handle more date formats:
   DateTime? _parseFirebaseDate(dynamic dateValue) {
     if (dateValue == null) return null;
 
@@ -200,9 +196,10 @@ class FilledCustomerReportProvider with ChangeNotifier {
     }
   }
 
+
   void _calculateReport(List<Map<String, dynamic>> transactionsList) {
     double totalDebit = 0.0;
-    double totalCredit = openingBalance; // Include opening balance
+    double totalCredit = 0.0;
     double finalBalance = openingBalance;
 
     for (var transaction in transactionsList) {
@@ -211,16 +208,12 @@ class FilledCustomerReportProvider with ChangeNotifier {
 
       totalDebit += debit;
       totalCredit += credit;
-    }
-
-    // Calculate final balance
-    if (transactionsList.isNotEmpty) {
-      finalBalance = transactionsList.last['balance'] ?? openingBalance;
+      finalBalance = finalBalance + credit - debit;
     }
 
     report = {
       'debit': totalDebit,
-      'credit': totalCredit - openingBalance, // Subtract opening balance for display
+      'credit': totalCredit,
       'balance': finalBalance,
       'openingBalance': openingBalance,
     };
@@ -528,6 +521,13 @@ class FilledCustomerReportProvider with ChangeNotifier {
         for (var entry in data.entries) {
           final transaction = Map<String, dynamic>.from(entry.value);
 
+          // Skip opening balance transactions (we already have them)
+          final isOpeningBalance = transaction['filledNumber'] == 'OPENING_BAL' ||
+              transaction['referenceNumber'] == 'Opening Balance' ||
+              transaction['description']?.toString().toLowerCase().contains('opening balance') == true;
+
+          if (isOpeningBalance) continue;
+
           final paymentMethod = transaction['paymentMethod']?.toString().toLowerCase();
           final status = transaction['status']?.toString().toLowerCase();
 
@@ -607,28 +607,59 @@ class FilledCustomerReportProvider with ChangeNotifier {
     }
   }
 
+
   Future<void> fetchOpeningBalance(String customerId) async {
     try {
-      final snapshot = await _db.child('customers/$customerId').once();
-      if (snapshot.snapshot.exists && snapshot.snapshot.value != null) {
-        final customerData = Map<String, dynamic>.from(snapshot.snapshot.value as Map);
-        openingBalance = (customerData['openingBalance'] ?? 0).toDouble();
+      // Look for opening balance in filledledger instead of customer node
+      final ledgerSnapshot = await _db.child('filledledger/$customerId').once();
 
-        // Get the opening balance date if it exists
-        if (customerData.containsKey('openingBalanceDate')) {
-          openingBalanceDate = _parseFirebaseDate(customerData['openingBalanceDate']);
-        } else {
-          // Default to current date if no date is stored
-          openingBalanceDate = DateTime.now();
+      openingBalance = 0.0;
+      openingBalanceDate = DateTime(2000); // Default fallback date
+
+      if (ledgerSnapshot.snapshot.exists) {
+        final data = Map<String, dynamic>.from(ledgerSnapshot.snapshot.value as Map);
+
+        // Search for the opening balance entry
+        for (var entry in data.entries) {
+          final transaction = Map<String, dynamic>.from(entry.value);
+
+          // Check if this is an opening balance transaction
+          final isOpeningBalance = transaction['filledNumber'] == 'OPENING_BAL' ||
+              transaction['referenceNumber'] == 'Opening Balance' ||
+              transaction['description']?.toString().toLowerCase().contains('opening balance') == true;
+
+          if (isOpeningBalance) {
+            // Found opening balance transaction
+            openingBalance = (transaction['creditAmount'] ?? 0).toDouble();
+
+            // Parse the date
+            if (transaction['createdAt'] != null) {
+              openingBalanceDate = _parseFirebaseDate(transaction['createdAt']);
+            }
+
+            print('Found opening balance in ledger: $openingBalance, date: $openingBalanceDate');
+            break;
+          }
         }
-      } else {
-        openingBalance = 0.0;
-        openingBalanceDate = DateTime.now();
+      }
+
+      // If no opening balance found in ledger, check customer node as fallback
+      if (openingBalance == 0.0) {
+        final customerSnapshot = await _db.child('customers/$customerId').once();
+        if (customerSnapshot.snapshot.exists && customerSnapshot.snapshot.value != null) {
+          final customerData = Map<String, dynamic>.from(customerSnapshot.snapshot.value as Map);
+          openingBalance = (customerData['openingBalance'] ?? 0).toDouble();
+
+          if (customerData.containsKey('openingBalanceDate')) {
+            openingBalanceDate = _parseFirebaseDate(customerData['openingBalanceDate']);
+          }
+          print('Fallback: Using opening balance from customer node: $openingBalance');
+        }
       }
     } catch (e) {
       print('Error fetching opening balance: $e');
       openingBalance = 0.0;
-      openingBalanceDate = DateTime.now();
+      openingBalanceDate = DateTime(2000);
     }
   }
 

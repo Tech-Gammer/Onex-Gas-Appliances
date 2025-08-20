@@ -107,48 +107,85 @@ class _CustomerListState extends State<CustomerList> {
     );
   }
 
+  // Future<double> _getRemainingFillesBalance(String customerId) async {
+  //   // Get customer data to access opening balance
+  //   final customerSnapshot = await _db.child('customers').child(customerId).once();
+  //   final customerData = customerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+  //   final openingBalance = customerData != null
+  //       ? (customerData['openingBalance'] ?? 0.0).toDouble()
+  //       : 0.0;
+  //
+  //   if (_ledgerCache.containsKey(customerId) && _ledgerCache[customerId]!.containsKey('filledBalance')) {
+  //     return (_ledgerCache[customerId]!['filledBalance'] ?? 0.0) + openingBalance;
+  //   }
+  //
+  //   try {
+  //     final customerLedgerRef = _db.child('filledledger').child(customerId);
+  //     final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+  //
+  //     double remainingBalance = openingBalance; // Start with opening balance
+  //     if (snapshot.snapshot.exists) {
+  //       final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
+  //       final lastEntryKey = ledgerEntries.keys.first;
+  //       final lastEntry = ledgerEntries[lastEntryKey];
+  //
+  //       if (lastEntry != null && lastEntry is Map) {
+  //         final remainingBalanceValue = lastEntry['remainingBalance'];
+  //         if (remainingBalanceValue is int) {
+  //           remainingBalance += remainingBalanceValue.toDouble();
+  //         } else if (remainingBalanceValue is double) {
+  //           remainingBalance += remainingBalanceValue;
+  //         }
+  //       }
+  //     }
+  //
+  //     // Update the cache with the filled balance
+  //     if (_ledgerCache.containsKey(customerId)) {
+  //       _ledgerCache[customerId]!['filledBalance'] = remainingBalance - openingBalance;
+  //     } else {
+  //       _ledgerCache[customerId] = {'filledBalance': remainingBalance - openingBalance};
+  //     }
+  //
+  //     return remainingBalance;
+  //   } catch (e) {
+  //     return openingBalance;
+  //   }
+  // }
+
   Future<double> _getRemainingFillesBalance(String customerId) async {
-    // Get customer data to access opening balance
-    final customerSnapshot = await _db.child('customers').child(customerId).once();
-    final customerData = customerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
-    final openingBalance = customerData != null
-        ? (customerData['openingBalance'] ?? 0.0).toDouble()
-        : 0.0;
-
-    if (_ledgerCache.containsKey(customerId) && _ledgerCache[customerId]!.containsKey('filledBalance')) {
-      return (_ledgerCache[customerId]!['filledBalance'] ?? 0.0) + openingBalance;
-    }
-
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
-      final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+      final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').once();
 
-      double remainingBalance = openingBalance; // Start with opening balance
+      double remainingBalance = 0.0;
+
       if (snapshot.snapshot.exists) {
         final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
-        final lastEntryKey = ledgerEntries.keys.first;
-        final lastEntry = ledgerEntries[lastEntryKey];
 
-        if (lastEntry != null && lastEntry is Map) {
-          final remainingBalanceValue = lastEntry['remainingBalance'];
-          if (remainingBalanceValue is int) {
-            remainingBalance += remainingBalanceValue.toDouble();
-          } else if (remainingBalanceValue is double) {
-            remainingBalance += remainingBalanceValue;
+        // Process all ledger entries to calculate the balance
+        ledgerEntries.forEach((key, value) {
+          if (value != null && value is Map) {
+            final debitAmount = (value['debitAmount'] ?? 0.0).toDouble();
+            final creditAmount = (value['creditAmount'] ?? 0.0).toDouble();
+
+            // For opening balance (credit), add to balance
+            // For payments (debit), subtract from balance
+            remainingBalance = remainingBalance + creditAmount - debitAmount;
           }
-        }
+        });
       }
 
-      // Update the cache with the filled balance
+      // Update the cache
       if (_ledgerCache.containsKey(customerId)) {
-        _ledgerCache[customerId]!['filledBalance'] = remainingBalance - openingBalance;
+        _ledgerCache[customerId]!['filledBalance'] = remainingBalance;
       } else {
-        _ledgerCache[customerId] = {'filledBalance': remainingBalance - openingBalance};
+        _ledgerCache[customerId] = {'filledBalance': remainingBalance};
       }
 
       return remainingBalance;
     } catch (e) {
-      return openingBalance;
+      print("Error calculating balance: $e");
+      return 0.0;
     }
   }
 
@@ -798,7 +835,12 @@ class _CustomerListState extends State<CustomerList> {
                                           IconButton(
                                             icon: const Icon(Icons.edit, color: Colors.orange),
                                             onPressed: () {
-                                              _showEditDialog(context, customer, customerProvider);
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => AddCustomer(customer: customer), // Pass customer data
+                                                ),
+                                              );
                                             },
                                           ),
                                           IconButton(
