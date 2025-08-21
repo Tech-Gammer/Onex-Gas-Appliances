@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:pdf/pdf.dart';
@@ -517,16 +518,20 @@ class FilledCustomerReportProvider with ChangeNotifier {
         final data = Map<String, dynamic>.from(snapshot.snapshot.value as Map);
 
         List<Map<String, dynamic>> tempTransactions = [];
+        bool hasOpeningBalanceTransaction = false;
 
         for (var entry in data.entries) {
           final transaction = Map<String, dynamic>.from(entry.value);
 
-          // Skip opening balance transactions (we already have them)
+          // Check if this is an opening balance transaction
           final isOpeningBalance = transaction['filledNumber'] == 'OPENING_BAL' ||
               transaction['referenceNumber'] == 'Opening Balance' ||
               transaction['description']?.toString().toLowerCase().contains('opening balance') == true;
 
-          if (isOpeningBalance) continue;
+          if (isOpeningBalance) {
+            hasOpeningBalanceTransaction = true;
+            continue; // Skip adding to transactions list but mark that we found one
+          }
 
           final paymentMethod = transaction['paymentMethod']?.toString().toLowerCase();
           final status = transaction['status']?.toString().toLowerCase();
@@ -583,6 +588,9 @@ class FilledCustomerReportProvider with ChangeNotifier {
         } else {
           _calculateReport(_allTransactions);
         }
+
+        // Update the UI to show correct entry count including opening balance
+        notifyListeners();
       } else {
         report = {
           'debit': 0.0,
@@ -607,59 +615,54 @@ class FilledCustomerReportProvider with ChangeNotifier {
     }
   }
 
-
   Future<void> fetchOpeningBalance(String customerId) async {
     try {
-      // Look for opening balance in filledledger instead of customer node
-      final ledgerSnapshot = await _db.child('filledledger/$customerId').once();
-
+      // Default values
       openingBalance = 0.0;
-      openingBalanceDate = DateTime(2000); // Default fallback date
+      openingBalanceDate = null; // <-- make it nullable instead of DateTime(2000)
+
+      // Look for opening balance in filledledger first
+      final ledgerSnapshot = await _db.child('filledledger/$customerId').once();
 
       if (ledgerSnapshot.snapshot.exists) {
         final data = Map<String, dynamic>.from(ledgerSnapshot.snapshot.value as Map);
 
-        // Search for the opening balance entry
         for (var entry in data.entries) {
           final transaction = Map<String, dynamic>.from(entry.value);
 
-          // Check if this is an opening balance transaction
-          final isOpeningBalance = transaction['filledNumber'] == 'OPENING_BAL' ||
-              transaction['referenceNumber'] == 'Opening Balance' ||
-              transaction['description']?.toString().toLowerCase().contains('opening balance') == true;
+          final isOpeningBalance =
+              transaction['filledNumber'] == 'OPENING_BAL' ||
+                  transaction['referenceNumber'] == 'Opening Balance' ||
+                  transaction['paymentMethod'] == 'Opening Balance' ||
+                  transaction['description']?.toString().toLowerCase().contains('opening balance') == true;
 
           if (isOpeningBalance) {
-            // Found opening balance transaction
+            // Found opening balance
             openingBalance = (transaction['creditAmount'] ?? 0).toDouble();
 
-            // Parse the date
             if (transaction['createdAt'] != null) {
-              openingBalanceDate = _parseFirebaseDate(transaction['createdAt']);
+              final createdAtValue = transaction['createdAt'].toString();
+              print('Raw createdAt value: $createdAtValue');
+
+              openingBalanceDate = _parseFirebaseDate(createdAtValue) ??
+                  DateTime.tryParse(createdAtValue);
+            } else if (transaction['date'] != null) {
+              openingBalanceDate = _parseFirebaseDate(transaction['date']);
             }
 
-            print('Found opening balance in ledger: $openingBalance, date: $openingBalanceDate');
+            print('Found opening balance in ledger: $openingBalance');
+            print('Parsed opening balance date: $openingBalanceDate');
             break;
           }
         }
       }
 
-      // If no opening balance found in ledger, check customer node as fallback
-      if (openingBalance == 0.0) {
-        final customerSnapshot = await _db.child('customers/$customerId').once();
-        if (customerSnapshot.snapshot.exists && customerSnapshot.snapshot.value != null) {
-          final customerData = Map<String, dynamic>.from(customerSnapshot.snapshot.value as Map);
-          openingBalance = (customerData['openingBalance'] ?? 0).toDouble();
-
-          if (customerData.containsKey('openingBalanceDate')) {
-            openingBalanceDate = _parseFirebaseDate(customerData['openingBalanceDate']);
-          }
-          print('Fallback: Using opening balance from customer node: $openingBalance');
-        }
-      }
+      openingBalanceDate ??= DateTime.now().subtract(Duration(days: 365));
+      print('Final Opening Balance Date: $openingBalanceDate');
     } catch (e) {
       print('Error fetching opening balance: $e');
       openingBalance = 0.0;
-      openingBalanceDate = DateTime(2000);
+      openingBalanceDate = DateTime.now().subtract(Duration(days: 365));
     }
   }
 
