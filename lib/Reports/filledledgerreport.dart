@@ -1,18 +1,12 @@
-import 'dart:io';
-import 'dart:ui' as ui;
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 import '../Provider/filledreportprovider.dart';
 import '../Provider/lanprovider.dart';
-import '../Provider/reportprovider.dart';
 import '../bankmanagement/banknames.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
@@ -40,7 +34,6 @@ class FilledLedgerReportPage extends StatefulWidget {
 class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
   DateTimeRange? selectedDateRange;
   static final Map<String, String> _bankIconMap = _createBankIconMap();
-  final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
   static Map<String, String> _createBankIconMap() {
     return {
@@ -162,6 +155,21 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       final openingBalance = provider.openingBalance ?? 0;
       final transactions = provider.transactions ?? [];
 
+      // Calculate totals
+      double totalDebit = 0;
+      double totalCredit = 0;
+      double finalBalance = 0;
+
+      if (openingBalance != 0) {
+        totalCredit += openingBalance;
+      }
+
+      for (var transaction in transactions) {
+        totalDebit += (transaction['debit'] ?? 0).toDouble();
+        totalCredit += (transaction['credit'] ?? 0).toDouble();
+      }
+
+      finalBalance = totalCredit - totalDebit;
       // Add customer information
       pdf.addPage(
         pw.MultiPage(
@@ -171,7 +179,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               pw.Header(
                 level: 0,
                 child: pw.Text(
-                  'Customer Ledger Report',
+                  'Party Statement',
                   style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
                 ),
               ),
@@ -205,39 +213,17 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 ],
               ),
               pw.SizedBox(height: 20),
-              // Summary section
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildPdfSummaryCard('Total Debit', provider.report['debit']?.toStringAsFixed(2) ?? '0.00'),
-                  _buildPdfSummaryCard('Total Credit', provider.report['credit']?.toStringAsFixed(2) ?? '0.00'),
-                  _buildPdfSummaryCard('Net Balance', provider.report['balance']?.toStringAsFixed(2) ?? '0.00'),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-            ];
-          },
-        ),
-      );
-
-      // Add transaction table
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          build: (pw.Context context) {
-            return [
               pw.Header(
                 level: 1,
                 child: pw.Text('Transaction Details'),
               ),
-              pw.SizedBox(height: 10),
-              _buildPDFTransactionTable(provider, languageProvider),
+              // _buildPDFTransactionTable(provider, languageProvider),
+              _buildPDFTransactionTable(provider, languageProvider, totalDebit, totalCredit, finalBalance),
+
             ];
           },
         ),
       );
-
-      // Print the PDF
       await _printPDF(pdf);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -249,59 +235,72 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     }
   }
 
-  pw.Widget _buildPdfSummaryCard(String title, String value) {
-    return pw.Container(
-      width: 150,
-      padding: pw.EdgeInsets.all(10),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300),
-        borderRadius: pw.BorderRadius.circular(5),
-      ),
-      child: pw.Column(
-        children: [
-          pw.Text(title, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 5),
-          pw.Text('Rs $value', style: pw.TextStyle(fontSize: 14)),
-        ],
-      ),
-    );
-  }
-
-
   pw.Widget _buildPDFTransactionTable(
       FilledCustomerReportProvider provider,
       LanguageProvider languageProvider,
-      ) {
+      double totalDebit,
+      double totalCredit,
+      double finalBalance,
+      )
+  {
     final openingBalance = provider.openingBalance ?? 0.0;
     final transactions = provider.transactions ?? [];
 
     List<pw.Widget> rows = [];
 
-    // 👉 Opening Balance row
+    // Table header
     rows.add(
       pw.Container(
-        padding: const pw.EdgeInsets.all(6),
         decoration: pw.BoxDecoration(color: PdfColors.grey200),
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text(
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Date' : 'ڈیٹ', 60),
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Details' : 'تفصیلات', 80),
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Type' : 'قسم', 50),
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ', 60),
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Bank' : 'بینک', 70),
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ', 50),
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ', 50),
+            _buildPdfHeaderCell(languageProvider.isEnglish ? 'Balance' : 'بیلنس', 60),
+          ],
+        ),
+      ),
+    );
+
+    // 👉 Opening Balance row
+    rows.add(
+      pw.Container(
+        padding: const pw.EdgeInsets.all(6),
+        decoration: pw.BoxDecoration(color: PdfColors.grey100),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _buildPdfDataCell(
               provider.openingBalanceDate != null
                   ? DateFormat('dd MMM yyyy').format(provider.openingBalanceDate!)
                   : '-',
-              style: const pw.TextStyle(fontSize: 10),
+              60,
             ),
-            pw.Text(
+            _buildPdfDataCell(
               languageProvider.isEnglish ? 'Opening Balance' : 'ابتدائی بیلنس',
-              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+              80,
             ),
-            pw.Text(
+            _buildPdfDataCell('-', 50),
+            _buildPdfDataCell('-', 60),
+            _buildPdfDataCell('-', 70),
+            _buildPdfDataCell('-', 50),
+            _buildPdfDataCell(
               'Rs ${openingBalance.toStringAsFixed(2)}',
-              style: pw.TextStyle(
-                fontSize: 10,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.blue800,
-              ),
+              50,
+              textColor: openingBalance > 0 ? PdfColors.green : PdfColors.red,
+              fontWeight: pw.FontWeight.bold,
+            ),
+            _buildPdfDataCell(
+              'Rs ${openingBalance.toStringAsFixed(2)}',
+              60,
+              textColor: openingBalance > 0 ? PdfColors.green : PdfColors.red,
+              fontWeight: pw.FontWeight.bold,
             ),
           ],
         ),
@@ -315,6 +314,17 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           transaction['referenceNumber']?.toString() ??
           transaction['filledNumber']?.toString() ??
           '-';
+
+      final isInvoice = (transaction['credit'] ?? 0) != 0;
+      final type = isInvoice
+          ? (languageProvider.isEnglish ? 'Invoice' : 'انوائس')
+          : (languageProvider.isEnglish ? 'Payment' : 'ادائیگی');
+
+      final paymentMethod = transaction['paymentMethod']?.toString() ?? '-';
+      final paymentMethodText = _getPaymentMethodText(paymentMethod, languageProvider);
+
+      final bankName = _getBankName(transaction);
+
       final debit = (transaction['debit'] ?? 0).toDouble();
       final credit = (transaction['credit'] ?? 0).toDouble();
       final balance = (transaction['balance'] ?? 0).toDouble();
@@ -331,29 +341,26 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text(DateFormat('dd MMM yyyy').format(date), style: const pw.TextStyle(fontSize: 10)),
-              pw.Text(details, style: const pw.TextStyle(fontSize: 10)),
-              pw.Text(
+              _buildPdfDataCell(DateFormat('dd MMM yyyy').format(date), 60),
+              _buildPdfDataCell(details, 80),
+              _buildPdfDataCell(type, 50),
+              _buildPdfDataCell(paymentMethodText, 60),
+              _buildPdfDataCell(bankName ?? '-', 70),
+              _buildPdfDataCell(
                 debit > 0 ? 'Rs ${debit.toStringAsFixed(2)}' : '-',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: debit > 0 ? PdfColors.red : PdfColors.black,
-                ),
+                50,
+                textColor: debit > 0 ? PdfColors.red : PdfColors.black,
               ),
-              pw.Text(
+              _buildPdfDataCell(
                 credit > 0 ? 'Rs ${credit.toStringAsFixed(2)}' : '-',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: credit > 0 ? PdfColors.green800 : PdfColors.black,
-                ),
+                50,
+                textColor: credit > 0 ? PdfColors.green800 : PdfColors.black,
               ),
-              pw.Text(
+              _buildPdfDataCell(
                 'Rs ${balance.toStringAsFixed(2)}',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.blue800,
-                ),
+                60,
+                fontWeight: pw.FontWeight.bold,
+                textColor: PdfColors.blue800,
               ),
             ],
           ),
@@ -361,7 +368,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       );
 
       // 👉 If Invoice and Expanded → Show Items
-      final isInvoice = credit != 0;
       final transactionKey = transaction['key']?.toString() ?? '';
       final isExpanded = provider.expandedTransactions.contains(transactionKey);
 
@@ -469,10 +475,97 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       }
     }
 
+    // Add summary row at the end
+    rows.add(
+      pw.Container(
+        padding: const pw.EdgeInsets.all(6),
+        decoration: pw.BoxDecoration(
+          color: PdfColors.orange100,
+          border: const pw.Border(
+            top: pw.BorderSide(color: PdfColors.orange, width: 1.5),
+          ),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _buildPdfDataCell(
+              languageProvider.isEnglish ? 'TOTALS' : 'کل',
+              60,
+              fontWeight: pw.FontWeight.bold,
+            ),
+            _buildPdfDataCell('', 80),
+            _buildPdfDataCell('', 50),
+            _buildPdfDataCell('', 60),
+            _buildPdfDataCell('', 70),
+            _buildPdfDataCell(
+              'Rs ${totalDebit.toStringAsFixed(2)}',
+              50,
+              fontWeight: pw.FontWeight.bold,
+              textColor: PdfColors.red,
+            ),
+            _buildPdfDataCell(
+              'Rs ${totalCredit.toStringAsFixed(2)}',
+              50,
+              fontWeight: pw.FontWeight.bold,
+              textColor: PdfColors.green800,
+            ),
+            _buildPdfDataCell(
+              'Rs ${finalBalance.toStringAsFixed(2)}',
+              60,
+              fontWeight: pw.FontWeight.bold,
+              textColor: finalBalance > 0 ? PdfColors.green : PdfColors.red,
+            ),
+          ],
+        ),
+      ),
+    );
+
     return pw.Column(children: rows);
   }
 
+  pw.Widget _buildPdfHeaderCell(String text, double width) {
+    return pw.Container(
+      width: width,
+      padding: const pw.EdgeInsets.all(6),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(right: pw.BorderSide(color: PdfColors.grey300)),
+      ),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.orange800,
+          fontSize: 9,
+        ),
+        textAlign: pw.TextAlign.center,
+      ),
+    );
+  }
 
+  pw.Widget _buildPdfDataCell(
+      String text,
+      double width, {
+        PdfColor? textColor,
+        pw.FontWeight? fontWeight,
+      }) {
+    return pw.Container(
+      width: width,
+      padding: const pw.EdgeInsets.all(6),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(right: pw.BorderSide(color: PdfColors.grey300)),
+      ),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 8,
+          color: textColor ?? PdfColors.black,
+          fontWeight: fontWeight,
+        ),
+        textAlign: pw.TextAlign.center,
+        maxLines: 2,
+      ),
+    );
+  }
 
   Future<void> _printPDF(pw.Document pdf) async {
     try {
@@ -592,46 +685,164 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
+  // Widget _buildSummaryCards(Map<String, dynamic> report) {
+  //   final isMobile = MediaQuery.of(context).size.width < 600;
+  //
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(vertical: 16.0),
+  //     child: Wrap(
+  //       spacing: 12.0,
+  //       runSpacing: 12.0,
+  //       alignment: WrapAlignment.center,
+  //       children: [
+  //         _buildSummaryCard('Total Debit', report['debit']?.toStringAsFixed(2) ?? '0.00', Colors.white, isMobile),
+  //         _buildSummaryCard('Total Credit', report['credit']?.toStringAsFixed(2) ?? '0.00', Colors.white, isMobile),
+  //         _buildSummaryCard('Net Balance', report['balance']?.toStringAsFixed(2) ?? '0.00', Colors.white, isMobile), // Orange balance card
+  //       ],
+  //     ),
+  //   );
+  // }
+
   Widget _buildSummaryCards(Map<String, dynamic> report) {
     final isMobile = MediaQuery.of(context).size.width < 600;
+    final double debit = report['debit']?.toDouble() ?? 0.0;
+    final double credit = report['credit']?.toDouble() ?? 0.0;
+    final double balance = report['balance']?.toDouble() ?? 0.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
-      child: Wrap(
-        spacing: 12.0,
-        runSpacing: 12.0,
-        alignment: WrapAlignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildSummaryCard('Total Debit', report['debit']?.toStringAsFixed(2) ?? '0.00', Colors.red, isMobile),
-          _buildSummaryCard('Total Credit', report['credit']?.toStringAsFixed(2) ?? '0.00', Colors.green, isMobile),
-          _buildSummaryCard('Net Balance', report['balance']?.toStringAsFixed(2) ?? '0.00', Color(0xFFFF8A65), isMobile), // Orange balance card
+          _buildModernSummaryCard(
+            title: 'Total Debit',
+            value: debit,
+            icon: Icons.trending_down,
+            color: Color(0xFFE57373), // Light red
+            isMobile: isMobile,
+          ),
+          _buildModernSummaryCard(
+            title: 'Total Credit',
+            value: credit,
+            icon: Icons.trending_up,
+            color: Color(0xFF81C784), // Light green
+            isMobile: isMobile,
+          ),
+          _buildModernSummaryCard(
+            title: 'Net Balance',
+            value: balance,
+            icon: Icons.account_balance_wallet,
+            color: balance >= 0 ? Color(0xFF64B5F6) : Color(0xFFFFB74D), // Blue for positive, orange for negative
+            isMobile: isMobile,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, Color color, bool isMobile) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: color.withOpacity(0.1),
-      child: SizedBox(
-        width: isMobile ? 120 : 180,
+  Widget _buildModernSummaryCard({
+    required String title,
+    required double value,
+    required IconData icon,
+    required Color color,
+    required bool isMobile,
+  }) {
+    return Expanded(
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(10.0),
+          padding: const EdgeInsets.all(16.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.pie_chart, size: isMobile ? 20 : 30, color: color),
-              const SizedBox(height: 6),
-              Text(title, style: TextStyle(fontSize: isMobile ? 12 : 16, color: color, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text('Rs $value', style: TextStyle(fontSize: isMobile ? 14 : 18, color: Colors.black87, fontWeight: FontWeight.w500)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: isMobile ? 20 : 24, color: color),
+                  ),
+                  Text(
+                    'Rs ${value.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: isMobile ? 14 : 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: isMobile ? 12 : 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              SizedBox(height: 4),
+              Container(
+                height: 4,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: value > 10000 ? 1.0 : value / 10000,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  // Widget _buildSummaryCard(String title, String value, Color color, bool isMobile) {
+  //   return Card(
+  //     elevation: 4,
+  //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  //     color: color.withOpacity(0.1),
+  //     child: SizedBox(
+  //       width: isMobile ? 120 : 180,
+  //       child: Padding(
+  //         padding: const EdgeInsets.all(10.0),
+  //         child: Column(
+  //           children: [
+  //             Icon(Icons.pie_chart, size: isMobile ? 20 : 30, color: color),
+  //             const SizedBox(height: 6),
+  //             Text(title, style: TextStyle(fontSize: isMobile ? 12 : 16, color: color, fontWeight: FontWeight.bold)),
+  //             const SizedBox(height: 4),
+  //             Text('Rs $value', style: TextStyle(fontSize: isMobile ? 14 : 18, color: Colors.black87, fontWeight: FontWeight.w500)),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   Widget _buildInvoiceItems(String transactionKey, FilledCustomerReportProvider reportProvider, DateTime date) {
     final invoiceItems = reportProvider.invoiceItems[transactionKey] ?? [];
@@ -725,7 +936,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-  // Mobile-friendly table layout
   Widget _buildMobileInvoiceTable(List<Map<String, dynamic>> invoiceItems) {
     return Column(
       children: invoiceItems.map((item) {
@@ -784,7 +994,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-  // Desktop table layout with proper constraints
   Widget _buildDesktopInvoiceTable(List<Map<String, dynamic>> invoiceItems) {
     return Container(
       width: double.infinity,
@@ -890,7 +1099,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-  // New method to build custom table with inline invoice items
   Widget _buildCustomTransactionTable(
       List<Map<String, dynamic>> transactions,
       FilledCustomerReportProvider reportProvider,
@@ -909,20 +1117,17 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
             color: Color(0xFFFFB74D).withOpacity(0.2),
             border: Border.all(color: Colors.grey[300]!),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildHeaderCell(languageProvider.isEnglish ? 'Date' : 'ڈیٹ', 120),
-                _buildHeaderCell(languageProvider.isEnglish ? 'Details' : 'تفصیلات', 120),
-                _buildHeaderCell(languageProvider.isEnglish ? 'Type' : 'قسم', 100),
-                _buildHeaderCell(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ', 120),
-                _buildHeaderCell(languageProvider.isEnglish ? 'Bank' : 'بینک', 150),
-                _buildHeaderCell(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ', 100),
-                _buildHeaderCell(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ', 100),
-                _buildHeaderCell(languageProvider.isEnglish ? 'Balance' : 'بیلنس', 100),
-              ],
-            ),
+          child: Row(
+            children: [
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Date' : 'ڈیٹ', 1),
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Details' : 'تفصیلات', 2),
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Type' : 'قسم', 1),
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ', 1.5),
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Bank' : 'بینک', 2),
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ', 1),
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ', 1),
+              _buildExpandedHeaderCell(languageProvider.isEnglish ? 'Balance' : 'بیلنس', 1),
+            ],
           ),
         ),
 
@@ -936,65 +1141,62 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               right: BorderSide(color: Colors.grey[300]!),
             ),
           ),
-          child: SingleChildScrollView  (
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildDataCell(
-                  reportProvider.openingBalanceDate != null
-                      ? DateFormat('dd MMM yyyy').format(reportProvider.openingBalanceDate!)
-                      : '-',
-                  120,
-                  isMobile,
-                ),
-                _buildDataCell(
-                  languageProvider.isEnglish ? 'Opening Balance' : 'ابتدائی بیلنس',
-                  120,
-                  isMobile,
-                ),
-                _buildDataCell(
-                  '-',
-                  100,
-                  isMobile,
-                ),
-                _buildDataCell(
-                  '-',
-                  120,
-                  isMobile,
-                ),
-                _buildDataCell(
-                  '-',
-                  150,
-                  isMobile,
-                ),
-                _buildDataCell(
-                  '-',
-                  100,
-                  isMobile,
-                ),
-                _buildDataCell(
-                  'Rs ${openingBalance.toStringAsFixed(2)}',
-                  100,
-                  isMobile,
-                  fontWeight: FontWeight.bold,
-                  textColor: openingBalance > 0 ? Colors.green : Colors.red,
-                ),
-                _buildDataCell(
-                  'Rs ${openingBalance.toStringAsFixed(2)}',
-                  100,
-                  isMobile,
-                  fontWeight: FontWeight.bold,
-                  textColor: openingBalance > 0 ? Colors.green : Colors.red,
-                ),
-              ],
-            ),
+          child: Row(
+            children: [
+              _buildExpandedDataCell(
+                reportProvider.openingBalanceDate != null
+                    ? DateFormat('dd MMM yyyy').format(reportProvider.openingBalanceDate!)
+                    : '-',
+                1,
+                isMobile,
+              ),
+              _buildExpandedDataCell(
+                languageProvider.isEnglish ? 'Opening Balance' : 'ابتدائی بیلنس',
+                2,
+                isMobile,
+              ),
+              _buildExpandedDataCell(
+                '-',
+                1,
+                isMobile,
+              ),
+              _buildExpandedDataCell(
+                '-',
+                1.5,
+                isMobile,
+              ),
+              _buildExpandedDataCell(
+                '-',
+                2,
+                isMobile,
+              ),
+              _buildExpandedDataCell(
+                '-',
+                1,
+                isMobile,
+              ),
+              _buildExpandedDataCell(
+                'Rs ${openingBalance.toStringAsFixed(2)}',
+                1,
+                isMobile,
+                fontWeight: FontWeight.bold,
+                textColor: openingBalance > 0 ? Colors.green : Colors.red,
+              ),
+              _buildExpandedDataCell(
+                'Rs ${openingBalance.toStringAsFixed(2)}',
+                1,
+                isMobile,
+                fontWeight: FontWeight.bold,
+                textColor: openingBalance > 0 ? Colors.green : Colors.red,
+              ),
+            ],
           ),
         ),
 
         ...transactions.expand((transaction) {
           List<Widget> rowWidgets = [];
 
-          rowWidgets.add(_buildTransactionRow(transaction, reportProvider, isMobile, languageProvider));
+          rowWidgets.add(_buildExpandedTransactionRow(transaction, reportProvider, isMobile, languageProvider));
 
           final isInvoice = (transaction['credit'] ?? 0) != 0;
           final transactionKey = transaction['key']?.toString() ?? '';
@@ -1011,26 +1213,29 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-  Widget _buildHeaderCell(String text, double width) {
-    return Container(
-      width: width,
-      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        border: Border(right: BorderSide(color: Colors.grey[300]!)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          color: Color(0xFFE65100),
-          fontSize: 12,
+  Widget _buildExpandedHeaderCell(String text, double flexValue) {
+    return Expanded(
+      flex: (flexValue * 10).round(),
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          border: Border(right: BorderSide(color: Colors.grey[300]!)),
         ),
-        textAlign: TextAlign.center,
+        child: Text(
+          text,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xFFE65100),
+            fontSize: 12,
+          ),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
 
-  Widget _buildTransactionRow(
+  Widget _buildExpandedTransactionRow(
       Map<String, dynamic> transaction,
       FilledCustomerReportProvider reportProvider,
       bool isMobile,
@@ -1068,112 +1273,113 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
             right: BorderSide(color: Colors.grey[300]!),
           ),
         ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildDataCell(
-                DateFormat('dd MMM yyyy').format(date),
-                120,
-                isMobile,
+        child: Row(
+          children: [
+            _buildExpandedDataCell(
+              DateFormat('dd MMM yyyy').format(date),
+              1,
+              isMobile,
+            ),
+            _buildExpandedDataCell(details, 2, isMobile),
+            _buildExpandedDataCell(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    isInvoice ? 'Invoice' : 'Payment',
+                    style: TextStyle(fontSize: isMobile ? 10 : 12),
+                  ),
+                  if (isInvoice) ...[
+                    SizedBox(width: 4),
+                    Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: Color(0xFFE65100),
+                    ),
+                  ],
+                ],
               ),
-              _buildDataCell(details, 120, isMobile),
-              _buildDataCell(
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      isInvoice ? 'Invoice' : 'Payment',
+              1,
+              isMobile,
+            ),
+            _buildExpandedDataCell(
+              _getPaymentMethodText(paymentMethod, languageProvider),
+              1.5,
+              isMobile,
+            ),
+            _buildExpandedDataCell(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (bankLogoPath != null) ...[
+                    Image.asset(bankLogoPath, width: 24, height: 24),
+                    SizedBox(width: 4),
+                  ],
+                  Flexible(
+                    child: Text(
+                      bankName ?? '-',
                       style: TextStyle(fontSize: isMobile ? 10 : 12),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (isInvoice) ...[
-                      SizedBox(width: 4),
-                      Icon(
-                        isExpanded ? Icons.expand_less : Icons.expand_more,
-                        size: 16,
-                        color: Color(0xFFE65100),
-                      ),
-                    ],
-                  ],
-                ),
-                100,
-                isMobile,
+                  ),
+                ],
               ),
-              _buildDataCell(
-                _getPaymentMethodText(paymentMethod, languageProvider),
-                120,
-                isMobile,
-              ),
-              _buildDataCell(
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (bankLogoPath != null) ...[
-                      Image.asset(bankLogoPath, width: 24, height: 24),
-                      SizedBox(width: 4),
-                    ],
-                    Flexible(
-                      child: Text(
-                        bankName ?? '-',
-                        style: TextStyle(fontSize: isMobile ? 10 : 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                150,
-                isMobile,
-              ),
-              _buildDataCell(
-                (transaction['debit'] ?? 0) > 0 ? 'Rs $debit' : '-',
-                100,
-                isMobile,
-                textColor: (transaction['debit'] ?? 0) > 0 ? Colors.red : Colors.grey,
-              ),
-              _buildDataCell(
-                (transaction['credit'] ?? 0) > 0 ? 'Rs $credit' : '-',
-                100,
-                isMobile,
-                textColor: (transaction['credit'] ?? 0) > 0 ? Colors.green : Colors.grey,
-              ),
-              _buildDataCell(
-                'Rs $balance',
-                100,
-                isMobile,
-                fontWeight: FontWeight.bold,
-              ),
-            ],
-          ),
+              2,
+              isMobile,
+            ),
+            _buildExpandedDataCell(
+              (transaction['debit'] ?? 0) > 0 ? 'Rs $debit' : '-',
+              1,
+              isMobile,
+              textColor: (transaction['debit'] ?? 0) > 0 ? Colors.red : Colors.grey,
+            ),
+            _buildExpandedDataCell(
+              (transaction['credit'] ?? 0) > 0 ? 'Rs $credit' : '-',
+              1,
+              isMobile,
+              textColor: (transaction['credit'] ?? 0) > 0 ? Colors.green : Colors.grey,
+            ),
+            _buildExpandedDataCell(
+              'Rs $balance',
+              1,
+              isMobile,
+              fontWeight: FontWeight.bold,
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildDataCell(
+  Widget _buildExpandedDataCell(
       dynamic content,
-      double width,
+      double flexValue,
       bool isMobile, {
         Color? textColor,
         FontWeight? fontWeight,
       })
   {
-    return Container(
-      width: width,
-      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        border: Border(right: BorderSide(color: Colors.grey[300]!)),
-      ),
-      child: content is Widget
-          ? content
-          : Text(
-        content.toString(),
-        style: TextStyle(
-          fontSize: isMobile ? 10 : 12,
-          color: textColor ?? Colors.black87,
-          fontWeight: fontWeight,
+    return Expanded(
+      flex: (flexValue * 10).round(),
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          border: Border(right: BorderSide(color: Colors.grey[300]!)),
         ),
-        textAlign: TextAlign.center,
-        overflow: TextOverflow.ellipsis,
+        child: content is Widget
+            ? Center(child: content)
+            : Text(
+          content.toString(),
+          style: TextStyle(
+            fontSize: isMobile ? 10 : 12,
+            color: textColor ?? Colors.black87,
+            fontWeight: fontWeight,
+          ),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
@@ -1191,4 +1397,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       default: return method;
     }
   }
+
+
 }

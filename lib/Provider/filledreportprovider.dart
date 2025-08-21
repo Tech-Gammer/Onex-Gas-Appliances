@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:pdf/pdf.dart';
-import 'package:printing/printing.dart';
-import 'package:pdf/widgets.dart' as pw;
+
 
 class FilledCustomerReportProvider with ChangeNotifier {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
@@ -19,8 +15,7 @@ class FilledCustomerReportProvider with ChangeNotifier {
   DateTimeRange? _dateRangeFilter;
   DateTimeRange? get dateRangeFilter => _dateRangeFilter;
   bool get isFiltered => _dateRangeFilter != null;
-  List<Map<String, dynamic>> get transactions =>
-      _dateRangeFilter == null ? _allTransactions : _filteredTransactions;
+  List<Map<String, dynamic>> get transactions => _dateRangeFilter == null ? _allTransactions : _filteredTransactions;
   DateTime? openingBalanceDate;
 
   void setDateRangeFilter(DateTimeRange? range) {
@@ -196,7 +191,6 @@ class FilledCustomerReportProvider with ChangeNotifier {
       _filteredTransactions[i]['balance'] = runningBalance;
     }
   }
-
 
   void _calculateReport(List<Map<String, dynamic>> transactionsList) {
     double totalDebit = 0.0;
