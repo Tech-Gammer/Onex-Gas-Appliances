@@ -18,6 +18,85 @@ class FilledCustomerReportProvider with ChangeNotifier {
   List<Map<String, dynamic>> get transactions => _dateRangeFilter == null ? _allTransactions : _filteredTransactions;
   DateTime? openingBalanceDate;
 
+
+  double get displayOpeningBalance {
+    if (!isFiltered || _dateRangeFilter == null) {
+      return openingBalance;
+    }
+
+    // If we have no transactions at all, just return the opening balance
+    if (_allTransactions.isEmpty) {
+      return openingBalance;
+    }
+
+    // Calculate cumulative balance up to the day BEFORE the filter starts
+    double cumulativeBalance = openingBalance;
+    final dayBeforeFilterStart = _dateRangeFilter!.start.subtract(Duration(days: 1));
+    final dayBeforeFilterStartOnly = DateTime(dayBeforeFilterStart.year, dayBeforeFilterStart.month, dayBeforeFilterStart.day);
+
+    bool foundTransactionsBeforeFilter = false;
+
+    for (var transaction in _allTransactions) {
+      final transactionDate = _parseFirebaseDate(transaction['date'] ?? transaction['createdAt']);
+      if (transactionDate != null) {
+        final transactionDateOnly = DateTime(transactionDate.year, transactionDate.month, transactionDate.day);
+
+        // Only include transactions that occur on or before the day before filter starts
+        if (transactionDateOnly.isBefore(dayBeforeFilterStartOnly) ||
+            transactionDateOnly.isAtSameMomentAs(dayBeforeFilterStartOnly)) {
+          foundTransactionsBeforeFilter = true;
+          final debit = (transaction['debit'] ?? 0.0).toDouble();
+          final credit = (transaction['credit'] ?? 0.0).toDouble();
+          cumulativeBalance = cumulativeBalance + credit - debit;
+        }
+      }
+    }
+
+    // If no transactions exist before the filter date, use the opening balance
+    if (!foundTransactionsBeforeFilter) {
+      return openingBalance;
+    }
+
+    return cumulativeBalance;
+  }
+
+  DateTime? get displayOpeningBalanceDate {
+    if (!isFiltered || _dateRangeFilter == null) {
+      return openingBalanceDate;
+    }
+
+    // Check if we have any transactions before the filter start date
+    bool hasTransactionsBeforeFilter = _allTransactions.any((transaction) {
+      final transactionDate = _parseFirebaseDate(transaction['date'] ?? transaction['createdAt']);
+      if (transactionDate == null) return false;
+
+      final transactionDateOnly = DateTime(transactionDate.year, transactionDate.month, transactionDate.day);
+      final filterStartOnly = DateTime(_dateRangeFilter!.start.year, _dateRangeFilter!.start.month, _dateRangeFilter!.start.day);
+
+      return transactionDateOnly.isBefore(filterStartOnly);
+    });
+
+    // If no transactions before filter, use the opening balance date if it exists
+    if (!hasTransactionsBeforeFilter && openingBalanceDate != null) {
+      return openingBalanceDate;
+    }
+
+    // Otherwise return the day before the filter start date
+    return _dateRangeFilter!.start.subtract(Duration(days: 1));
+  }
+
+  String get openingBalanceLabel {
+    if (!isFiltered || _dateRangeFilter == null) {
+      return 'Opening Balance';
+    }
+    return 'Previous Balance';
+  }
+
+
+
+
+
+
   void setDateRangeFilter(DateTimeRange? range) {
     _dateRangeFilter = range;
     if (range != null) {
@@ -163,24 +242,8 @@ class FilledCustomerReportProvider with ChangeNotifier {
   void _recalculateBalancesForFiltered() {
     if (_filteredTransactions.isEmpty) return;
 
-    // Find the balance before the first filtered transaction
-    double startingBalance = openingBalance;
-
-    if (_filteredTransactions.isNotEmpty) {
-      final firstFilteredDate = _parseFirebaseDate(_filteredTransactions.first['date'] ?? _filteredTransactions.first['createdAt']);
-
-      if (firstFilteredDate != null) {
-        // Calculate balance up to the first filtered transaction
-        for (var transaction in _allTransactions) {
-          final transactionDate = _parseFirebaseDate(transaction['date'] ?? transaction['createdAt']);
-          if (transactionDate != null && transactionDate.isBefore(firstFilteredDate)) {
-            final debit = (transaction['debit'] ?? 0.0).toDouble();
-            final credit = (transaction['credit'] ?? 0.0).toDouble();
-            startingBalance = startingBalance + credit - debit;
-          }
-        }
-      }
-    }
+    // Start with the displayOpeningBalance (which is calculated up to day before filter)
+    double startingBalance = displayOpeningBalance;
 
     // Recalculate running balance for filtered transactions
     double runningBalance = startingBalance;
@@ -192,10 +255,11 @@ class FilledCustomerReportProvider with ChangeNotifier {
     }
   }
 
+
   void _calculateReport(List<Map<String, dynamic>> transactionsList) {
     double totalDebit = 0.0;
     double totalCredit = 0.0;
-    double finalBalance = openingBalance;
+    double finalBalance = displayOpeningBalance; // Use displayOpeningBalance instead of openingBalance
 
     for (var transaction in transactionsList) {
       final debit = (transaction['debit'] ?? 0.0).toDouble();
@@ -210,7 +274,7 @@ class FilledCustomerReportProvider with ChangeNotifier {
       'debit': totalDebit,
       'credit': totalCredit,
       'balance': finalBalance,
-      'openingBalance': openingBalance,
+      'openingBalance': displayOpeningBalance, // Use displayOpeningBalance
     };
   }
 
