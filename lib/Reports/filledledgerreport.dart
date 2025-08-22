@@ -128,7 +128,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                     children: [
                       _buildCustomerInfo(context, languageProvider,provider),
                       _buildDateRangeSelector(languageProvider),
-                      _buildSummaryCards(report),
+                      _buildSummaryCards(provider),
                       Text(
                         'No. of Entries: ${transactions.length + (provider.openingBalance != 0 ? 1 : 0)} (Filtered)',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -155,21 +155,29 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       final openingBalance = provider.openingBalance ?? 0;
       final transactions = provider.transactions ?? [];
 
-      // Calculate totals
       double totalDebit = 0;
       double totalCredit = 0;
-      double finalBalance = 0;
+      double finalBalance = openingBalance; // carry forward
 
-      if (openingBalance != 0) {
+      // include opening balance in totals (if you want it in totalCredit column)
+      if (openingBalance > 0) {
         totalCredit += openingBalance;
+      } else if (openingBalance < 0) {
+        totalDebit += openingBalance.abs();
       }
 
       for (var transaction in transactions) {
-        totalDebit += (transaction['debit'] ?? 0).toDouble();
-        totalCredit += (transaction['credit'] ?? 0).toDouble();
+        final debit = (transaction['debit'] ?? 0).toDouble();
+        final credit = (transaction['credit'] ?? 0).toDouble();
+
+        totalDebit += debit;
+        totalCredit += credit;
+
+        finalBalance += credit;
+        finalBalance -= debit;
       }
 
-      finalBalance = totalCredit - totalDebit;
+      // finalBalance = totalCredit - totalDebit;
       // Add customer information
       pdf.addPage(
         pw.MultiPage(
@@ -218,7 +226,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 child: pw.Text('Transaction Details'),
               ),
               // _buildPDFTransactionTable(provider, languageProvider),
-              _buildPDFTransactionTable(provider, languageProvider, totalDebit, totalCredit, finalBalance),
+              // _buildPDFTransactionTable(provider, languageProvider, totalDebit, totalCredit, finalBalance),
+              _buildPDFTransactionTable(provider, languageProvider),
 
             ];
           },
@@ -238,13 +247,18 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
   pw.Widget _buildPDFTransactionTable(
       FilledCustomerReportProvider provider,
       LanguageProvider languageProvider,
-      double totalDebit,
-      double totalCredit,
-      double finalBalance,
       )
   {
-    final displayBalance = provider.displayOpeningBalance;
+    final openingBalanceDisplay = provider.displayOpeningBalance;
     final transactions = provider.transactions ?? [];
+
+    // Calculate totals the same way as in the UI summary cards
+    double totalDebit = provider.report['debit']?.toDouble() ?? 0.0;
+    double totalCredit = openingBalanceDisplay + (provider.report['credit']?.toDouble() ?? 0.0);
+    double finalBalance = provider.report['balance']?.toDouble() ?? 0.0;
+
+    // If we're filtered and have no transactions, show zero balance
+    final displayFinalBalance = provider.isFiltered && provider.transactions.isEmpty ? 0.0 : finalBalance;
 
     List<pw.Widget> rows = [];
 
@@ -270,7 +284,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
 
     // 👉 Opening Balance row
     // Opening/Previous Balance row - only show if there's a balance or not filtered
-    if (displayBalance != 0 || !provider.isFiltered) {
+    if (openingBalanceDisplay != 0 || !provider.isFiltered) {
       rows.add(
         pw.Container(
           padding: const pw.EdgeInsets.all(6),
@@ -295,15 +309,15 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               _buildPdfDataCell('-', 70),
               _buildPdfDataCell('-', 50),
               _buildPdfDataCell(
-                'Rs ${displayBalance.toStringAsFixed(2)}',
+                'Rs ${openingBalanceDisplay.toStringAsFixed(2)}',
                 50,
-                textColor: displayBalance > 0 ? PdfColors.green : PdfColors.red,
+                textColor: openingBalanceDisplay > 0 ? PdfColors.green : PdfColors.red,
                 fontWeight: pw.FontWeight.bold,
               ),
               _buildPdfDataCell(
-                'Rs ${displayBalance.toStringAsFixed(2)}',
+                'Rs ${openingBalanceDisplay.toStringAsFixed(2)}',
                 60,
-                textColor: displayBalance > 0 ? PdfColors.green : PdfColors.red,
+                textColor: openingBalanceDisplay > 0 ? PdfColors.green : PdfColors.red,
                 fontWeight: pw.FontWeight.bold,
               ),
             ],
@@ -480,7 +494,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       }
     }
 
-    // Add summary row at the end
+    // Add summary row at the end - using the same calculation as UI summary cards
     rows.add(
       pw.Container(
         padding: const pw.EdgeInsets.all(6),
@@ -515,10 +529,10 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               textColor: PdfColors.green800,
             ),
             _buildPdfDataCell(
-              'Rs ${finalBalance.toStringAsFixed(2)}',
+              'Rs ${displayFinalBalance.toStringAsFixed(2)}',
               60,
               fontWeight: pw.FontWeight.bold,
-              textColor: finalBalance > 0 ? PdfColors.green : PdfColors.red,
+              textColor: displayFinalBalance > 0 ? PdfColors.green : PdfColors.red,
             ),
           ],
         ),
@@ -690,11 +704,18 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-  Widget _buildSummaryCards(Map<String, dynamic> report) {
+  Widget _buildSummaryCards(FilledCustomerReportProvider provider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
-    final double debit = report['debit']?.toDouble() ?? 0.0;
-    final double credit = report['credit']?.toDouble() ?? 0.0;
-    final double balance = report['balance']?.toDouble() ?? 0.0;
+    // Get the opening/previous balance
+    final double openingBalance = provider.displayOpeningBalance;
+
+    final double debit = provider.report['debit']?.toDouble() ?? 0.0;
+    // final double credit = provider.report['credit']?.toDouble() ?? 0.0;
+    double totalCredit = openingBalance + (provider.report['credit']?.toDouble() ?? 0.0);
+    final double balance = provider.report['balance']?.toDouble() ?? 0.0;
+
+    // If we're filtered and have no transactions, show zero balance
+    final displayBalance = provider.isFiltered && provider.transactions.isEmpty ? 0.0 : balance;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -705,21 +726,21 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
             title: 'Total Debit',
             value: debit,
             icon: Icons.trending_down,
-            color: Color(0xFFE57373), // Light red
+            color: Color(0xFFE57373),
             isMobile: isMobile,
           ),
           _buildModernSummaryCard(
             title: 'Total Credit',
-            value: credit,
+            value: totalCredit,
             icon: Icons.trending_up,
-            color: Color(0xFF81C784), // Light green
+            color: Color(0xFF81C784),
             isMobile: isMobile,
           ),
           _buildModernSummaryCard(
             title: 'Net Balance',
-            value: balance,
+            value: displayBalance, // Use the adjusted balance
             icon: Icons.account_balance_wallet,
-            color: balance >= 0 ? Color(0xFF64B5F6) : Color(0xFFFFB74D), // Blue for positive, orange for negative
+            color: displayBalance >= 0 ? Color(0xFF64B5F6) : Color(0xFFFFB74D),
             isMobile: isMobile,
           ),
         ],

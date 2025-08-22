@@ -259,7 +259,12 @@ class FilledCustomerReportProvider with ChangeNotifier {
   void _calculateReport(List<Map<String, dynamic>> transactionsList) {
     double totalDebit = 0.0;
     double totalCredit = 0.0;
-    double finalBalance = displayOpeningBalance; // Use displayOpeningBalance instead of openingBalance
+    double finalBalance = 0.0;
+
+    // Only use opening balance if we're not filtering or if we have transactions
+    if (!isFiltered || transactionsList.isNotEmpty) {
+      finalBalance = displayOpeningBalance;
+    }
 
     for (var transaction in transactionsList) {
       final debit = (transaction['debit'] ?? 0.0).toDouble();
@@ -274,9 +279,10 @@ class FilledCustomerReportProvider with ChangeNotifier {
       'debit': totalDebit,
       'credit': totalCredit,
       'balance': finalBalance,
-      'openingBalance': displayOpeningBalance, // Use displayOpeningBalance
+      'openingBalance': displayOpeningBalance,
     };
   }
+
 
   void toggleTransactionExpansion(String transactionKey) {
     if (expandedTransactions.contains(transactionKey)) {
