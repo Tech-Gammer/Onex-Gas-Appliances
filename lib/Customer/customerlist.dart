@@ -107,51 +107,6 @@ class _CustomerListState extends State<CustomerList> {
     );
   }
 
-  // Future<double> _getRemainingFillesBalance(String customerId) async {
-  //   // Get customer data to access opening balance
-  //   final customerSnapshot = await _db.child('customers').child(customerId).once();
-  //   final customerData = customerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
-  //   final openingBalance = customerData != null
-  //       ? (customerData['openingBalance'] ?? 0.0).toDouble()
-  //       : 0.0;
-  //
-  //   if (_ledgerCache.containsKey(customerId) && _ledgerCache[customerId]!.containsKey('filledBalance')) {
-  //     return (_ledgerCache[customerId]!['filledBalance'] ?? 0.0) + openingBalance;
-  //   }
-  //
-  //   try {
-  //     final customerLedgerRef = _db.child('filledledger').child(customerId);
-  //     final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
-  //
-  //     double remainingBalance = openingBalance; // Start with opening balance
-  //     if (snapshot.snapshot.exists) {
-  //       final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
-  //       final lastEntryKey = ledgerEntries.keys.first;
-  //       final lastEntry = ledgerEntries[lastEntryKey];
-  //
-  //       if (lastEntry != null && lastEntry is Map) {
-  //         final remainingBalanceValue = lastEntry['remainingBalance'];
-  //         if (remainingBalanceValue is int) {
-  //           remainingBalance += remainingBalanceValue.toDouble();
-  //         } else if (remainingBalanceValue is double) {
-  //           remainingBalance += remainingBalanceValue;
-  //         }
-  //       }
-  //     }
-  //
-  //     // Update the cache with the filled balance
-  //     if (_ledgerCache.containsKey(customerId)) {
-  //       _ledgerCache[customerId]!['filledBalance'] = remainingBalance - openingBalance;
-  //     } else {
-  //       _ledgerCache[customerId] = {'filledBalance': remainingBalance - openingBalance};
-  //     }
-  //
-  //     return remainingBalance;
-  //   } catch (e) {
-  //     return openingBalance;
-  //   }
-  // }
-
   Future<double> _getRemainingFillesBalance(String customerId) async {
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
@@ -323,8 +278,6 @@ class _CustomerListState extends State<CustomerList> {
 
     return imageBytes;
   }
-
-
 
   Future<void> _showPaymentDialog(BuildContext context, Customer customer) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -565,6 +518,20 @@ class _CustomerListState extends State<CustomerList> {
                       final filledNumber = DateTime.now().millisecondsSinceEpoch.toString();
 
                       // Update customer ledger directly
+                      // await filledProvider.updateCustomerLedger(
+                      //   customer.id,
+                      //   creditAmount: 0.0,
+                      //   debitAmount: amount,
+                      //   remainingBalance: (_customerBalances[customer.id] ?? 0.0) - amount,
+                      //   filledNumber: filledNumber,
+                      //   referenceNumber: 'Direct Payment',
+                      //   paymentMethod: _selectedPaymentMethod,
+                      //   bankId: _selectedPaymentMethod == 'Bank' ? _selectedBankId :
+                      //   (_selectedPaymentMethod == 'Cheque' ? _selectedBankId : null),
+                      //   bankName: _selectedPaymentMethod == 'Bank' ? _selectedBankName :
+                      //   (_selectedPaymentMethod == 'Cheque' ? _selectedBankName : null),
+                      // );
+                      // Update customer ledger directly
                       await filledProvider.updateCustomerLedger(
                         customer.id,
                         creditAmount: 0.0,
@@ -577,6 +544,8 @@ class _CustomerListState extends State<CustomerList> {
                         (_selectedPaymentMethod == 'Cheque' ? _selectedBankId : null),
                         bankName: _selectedPaymentMethod == 'Bank' ? _selectedBankName :
                         (_selectedPaymentMethod == 'Cheque' ? _selectedBankName : null),
+                        chequeNumber: _selectedPaymentMethod == 'Cheque' ? _chequeNumberController.text : null,
+                        description: _paymentDescription ?? 'Payment from ${customer.name}',
                       );
 
                       // Handle specific payment methods
@@ -654,8 +623,6 @@ class _CustomerListState extends State<CustomerList> {
       },
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -803,6 +770,12 @@ class _CustomerListState extends State<CustomerList> {
                                       style: const TextStyle(fontSize: 20),
                                     ),
                                   ),
+                                  DataColumn(
+                                    label: Text(
+                                      languageProvider.isEnglish ? 'Payments' : 'ادائیگیاں',
+                                      style: TextStyle(fontSize: 20),
+                                    ),
+                                  ),
 
                                 ],
                                 rows: filteredCustomers
@@ -871,7 +844,12 @@ class _CustomerListState extends State<CustomerList> {
                                           },
                                         ),
                                       ),
-
+                                      DataCell(
+                                        IconButton(
+                                          icon: Icon(Icons.history, color: Colors.blue),
+                                          onPressed: () => _showPaymentHistory(context, customer),
+                                        ),
+                                      ),
                                     ]);
                                 }).toList(),
                               ),
@@ -940,6 +918,10 @@ class _CustomerListState extends State<CustomerList> {
                                       IconButton(
                                         icon: const Icon(Icons.delete, color: Colors.red),
                                         onPressed: () => _showDeleteConfirmationDialog(context, customer, customerProvider),
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.history, color: Colors.blue),
+                                        onPressed: () => _showPaymentHistory(context, customer),
                                       ),
                                     ],
                                   ),
@@ -1178,6 +1160,246 @@ class _CustomerListState extends State<CustomerList> {
         );
       },
     );
+  }
+
+  Future<void> _showPaymentHistory(BuildContext context, Customer customer) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customer.id);
+      final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').once();
+
+      if (!snapshot.snapshot.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(languageProvider.isEnglish
+                ? 'No payment history found'
+                : 'کوئی ادائیگی کی تاریخ نہیں ملی'),
+          ),
+        );
+        return;
+      }
+
+      final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
+      final List<Map<String, dynamic>> payments = [];
+
+      ledgerEntries.forEach((key, value) {
+        if (value != null && value is Map) {
+          final debitAmount = (value['debitAmount'] ?? 0.0).toDouble();
+          if (debitAmount > 0) { // Only show debit entries (payments)
+            payments.add({
+              'key': key,
+              'amount': debitAmount,
+              'date': value['createdAt'] ?? '',
+              'method': value['paymentMethod'] ?? '',
+              'description': value['description'] ?? '',
+              'bankName': value['bankName'] ?? '',
+              'chequeNumber': value['chequeNumber'] ?? '',
+            });
+          }
+        }
+      });
+
+      // Sort by date descending
+      payments.sort((a, b) => b['date'].compareTo(a['date']));
+
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish
+              ? 'Payment History - ${customer.name}'
+              : 'ادائیگی کی تاریخ - ${customer.name}'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: payments.isEmpty
+                ? Center(
+              child: Text(languageProvider.isEnglish
+                  ? 'No payments found'
+                  : 'کوئی ادائیگی نہیں ملی'),
+            )
+                : ListView.builder(
+              itemCount: payments.length,
+              itemBuilder: (context, index) {
+                final payment = payments[index];
+                return Card(
+                  margin: EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    title: Text(
+                      '${payment['amount']} Rs',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${payment['method']}'),
+                        if (payment['bankName'] != null && payment['bankName'].isNotEmpty)
+                          Text('Bank: ${payment['bankName']}'),
+                        if (payment['chequeNumber'] != null && payment['chequeNumber'].isNotEmpty)
+                          Text('Cheque: ${payment['chequeNumber']}'),
+                        Text(DateFormat('yyyy-MM-dd HH:mm').format(
+                            DateTime.parse(payment['date'])
+                        )),
+                        if (payment['description'] != null && payment['description'].isNotEmpty)
+                          Text('Desc: ${payment['description']}'),
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _deletePayment(
+                          context,
+                          customer,
+                          payment['key'],
+                          payment['amount'],
+                          payment['method'],
+                          payment['bankName'],
+                          payment['chequeNumber']
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deletePayment(
+      BuildContext context,
+      Customer customer,
+      String paymentKey,
+      double amount,
+      String paymentMethod,
+      String? bankName,
+      String? chequeNumber
+      )
+  async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish
+            ? 'Delete Payment?'
+            : 'ادائیگی حذف کریں؟'),
+        content: Text(languageProvider.isEnglish
+            ? 'Are you sure you want to delete this payment of Rs. $amount?'
+            : 'کیا آپ واقعی اس $amount روپے کی ادائیگی کو حذف کرنا چاہتے ہیں؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(languageProvider.isEnglish ? 'Delete' : 'حذف کریں'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        // Delete from filledledger
+        await _db.child('filledledger').child(customer.id).child(paymentKey).remove();
+
+        // Handle reversal based on payment method
+        if (paymentMethod == 'Cash') {
+          // Add reverse entry to cash book
+          await filledProvider.addCashBookEntry(
+            description: 'Payment deletion - ${customer.name}',
+            amount: amount,
+            dateTime: DateTime.now(),
+            type: 'cash_out', // Reverse the cash inflow
+          );
+        }
+        else if (paymentMethod == 'Cheque' && chequeNumber != null) {
+          // Delete cheque entry
+          final chequesRef = _db.child('banks');
+          final chequesSnapshot = await chequesRef.orderByChild('chequeNumber').equalTo(chequeNumber).once();
+          if (chequesSnapshot.snapshot.exists) {
+            final cheques = chequesSnapshot.snapshot.value as Map<dynamic, dynamic>;
+            final chequeKey = cheques.keys.first;
+            await chequesRef.child(chequeKey).remove();
+          }
+        }
+        else if (paymentMethod == 'Bank' && bankName != null) {
+          // Find and delete bank transaction
+          final banksRef = _db.child('banks');
+          final banksSnapshot = await banksRef.once();
+
+          if (banksSnapshot.snapshot.exists) {
+            final banks = banksSnapshot.snapshot.value as Map<dynamic, dynamic>;
+
+            for (var bankEntry in banks.entries) {
+              final bankId = bankEntry.key;
+              final bankData = bankEntry.value as Map<dynamic, dynamic>;
+
+              if (bankData['name'] == bankName) {
+                final transactionsRef = _db.child('banks/$bankId/transactions');
+                final transactionsSnapshot = await transactionsRef.orderByChild('amount').equalTo(amount).once();
+
+                if (transactionsSnapshot.snapshot.exists) {
+                  final transactions = transactionsSnapshot.snapshot.value as Map<dynamic, dynamic>;
+                  final transactionKey = transactions.keys.first;
+                  await transactionsRef.child(transactionKey).remove();
+
+                  // Update bank balance (subtract the amount)
+                  final currentBalance = (bankData['balance'] ?? 0.0).toDouble();
+                  await _db.child('banks/$bankId/balance').set(currentBalance - amount);
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        // Update local balance
+        setState(() {
+          _customerBalances[customer.id] = (_customerBalances[customer.id] ?? 0.0) + amount;
+        });
+
+        Navigator.pop(context); // Close the payment history dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(languageProvider.isEnglish
+                ? 'Payment deleted successfully'
+                : 'ادائیگی کامیابی سے حذف ہو گئی'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Refresh payment history
+        _showPaymentHistory(context, customer);
+
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting payment: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
 

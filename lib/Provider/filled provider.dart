@@ -1395,29 +1395,33 @@ class FilledProvider with ChangeNotifier {
   // Add this public method to your FilledProvider class
 
   Future<void> updateCustomerLedger(
-      String customerId, {
-        required double creditAmount,
-        required double debitAmount,
-        required double remainingBalance,
+      String customerId,
+      {double creditAmount = 0.0,
+        double debitAmount = 0.0,
+        double remainingBalance = 0.0,
         required String filledNumber,
         required String referenceNumber,
+        String? paymentMethod,
         String? bankId,
         String? bankName,
-        String? paymentMethod,
-      })
-  async {
-    // Call the private method
-    await _updateCustomerLedger(
-      customerId,
-      creditAmount: creditAmount,
-      debitAmount: debitAmount,
-      remainingBalance: remainingBalance,
-      filledNumber: filledNumber,
-      referenceNumber: referenceNumber,
-      bankId: bankId,
-      bankName: bankName,
-      paymentMethod: paymentMethod,
-    );
+        String? chequeNumber,
+        String? description}) async {
+
+    final ledgerRef = _db.child('filledledger').child(customerId);
+
+    await ledgerRef.push().set({
+      'creditAmount': creditAmount,
+      'debitAmount': debitAmount,
+      'remainingBalance': remainingBalance,
+      'filledNumber': filledNumber,
+      'referenceNumber': referenceNumber,
+      'paymentMethod': paymentMethod,
+      'bankId': bankId,
+      'bankName': bankName,
+      'chequeNumber': chequeNumber,
+      'description': description,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
   }
 
 }

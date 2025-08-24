@@ -49,7 +49,6 @@ class Customer {
 class CustomerProvider with ChangeNotifier {
   final DatabaseReference _dbRef = FirebaseDatabase.instance.ref().child('customers');
   List<Customer> _customers = [];
-
   List<Customer> get customers => _customers;
 
   Future<void> fetchCustomers() async {
@@ -60,9 +59,9 @@ class CustomerProvider with ChangeNotifier {
     }
   }
 
-
   Future<void> addCustomer(String name, String address, String phone, String city,
-      [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
+      [double openingBalance = 0.0, DateTime? openingBalanceDate])
+  async {
     final newCustomer = _dbRef.push();
     final customerId = newCustomer.key!;
 
@@ -91,7 +90,8 @@ class CustomerProvider with ChangeNotifier {
       String customerId,
       double openingBalance,
       DateTime date
-      ) async {
+      )
+  async {
     final ledgerRef = FirebaseDatabase.instance.ref().child('filledledger').child(customerId);
 
     final ledgerData = {
@@ -109,7 +109,8 @@ class CustomerProvider with ChangeNotifier {
   }
 
   Future<void> updateCustomer(String id, String name, String address, String phone, String city,
-      [double openingBalance = 0.0, DateTime? openingBalanceDate]) async {
+      [double openingBalance = 0.0, DateTime? openingBalanceDate])
+  async {
 
     // Update customer node
     await _dbRef.child(id).update({
@@ -130,7 +131,8 @@ class CustomerProvider with ChangeNotifier {
   Future<void> _updateOpeningBalanceInLedger(
       String customerId,
       double openingBalance,
-      DateTime? date) async {
+      DateTime? date)
+  async {
     final ledgerRef = FirebaseDatabase.instance.ref().child('filledledger').child(customerId);
 
     // First, try to find the existing opening balance entry
