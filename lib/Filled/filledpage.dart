@@ -72,7 +72,8 @@ class _filledpageState extends State<filledpage> {
   String _prefix = 'A';
   int _lastNumber = 0;
   final TextEditingController _autoReferenceController = TextEditingController();
-
+  TextEditingController _biltiNumberController = TextEditingController();
+  TextEditingController _transportCompanyController = TextEditingController();
 
   Future<String> _generateAutoReferenceNumber({bool increment = true}) async {
     // Get the last used number from Firebase
@@ -396,18 +397,13 @@ class _filledpageState extends State<filledpage> {
               pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 11)),
               pw.Text('Customer Address: ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 11)),
               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 11)),
-              // pw.Row(
-              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              //   children: [
-              //     pw.Text('Previous Balance: ${remainingBalance.toStringAsFixed(2)}rs', style:  pw.TextStyle(fontSize: 12,fontWeight: pw.FontWeight.bold)),
-              //     // pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-              //   ],
-              // ),
+
               pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
               pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
 
               pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
-
+              pw.Text('Bilti Number: ${_biltiNumberController.text}', style: const pw.TextStyle(fontSize: 11)),
+              pw.Text('Transport Company: ${_transportCompanyController.text}', style: const pw.TextStyle(fontSize: 11)),
               pw.SizedBox(height: 10),
 
               // Filled Table with Urdu text converted to images
@@ -1594,13 +1590,17 @@ class _filledpageState extends State<filledpage> {
     super.initState();
 
     _fetchItems();
-
+    // Add these initializations
+    _biltiNumberController = TextEditingController();
+    _transportCompanyController = TextEditingController();
     // Initialize _currentFilled with passed data or default structure
     _currentFilled = widget.filled ?? {
       'filledNumber': null,
       'customerId': '',
       'customerName': '',
       'referenceNumber': '',
+      'biltiNumber': '', // Add this
+      'transportCompany': '', // Add this
       'items': [],
       'subtotal': 0.0,
       'discount': 0.0,
@@ -1624,7 +1624,10 @@ class _filledpageState extends State<filledpage> {
       // Set to current date for new invoices
       _dateController.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
     }
-
+    if (widget.filled != null) {
+      _biltiNumberController.text = widget.filled!['biltiNumber']?.toString() ?? '';
+      _transportCompanyController.text = widget.filled!['transportCompany']?.toString() ?? '';
+    }
     // Safe controller initialization
     _mazdooriController.text =
         (_currentFilled!['mazdoori'] as num?)?.toStringAsFixed(2) ?? '0.00';
@@ -1744,6 +1747,8 @@ class _filledpageState extends State<filledpage> {
     _dateController.dispose();
     _mazdooriController.dispose();
     _referenceController.dispose();
+    _biltiNumberController.dispose();
+    _transportCompanyController.dispose();
     super.dispose();
   }
 
@@ -2184,7 +2189,27 @@ class _filledpageState extends State<filledpage> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField(
+                    controller: _biltiNumberController,
+                    label: languageProvider.isEnglish ? 'Bilti Number' : 'بلٹی نمبر',
+                    icon: Icons.confirmation_number,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildTextField(
+                    controller: _transportCompanyController,
+                    label: languageProvider.isEnglish ? 'Transport Company' : 'ٹرانسپورٹ کمپنی',
+                    icon: Icons.local_shipping,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             if (isMobile) ...[
               Row(
                 children: [
@@ -3128,6 +3153,8 @@ class _filledpageState extends State<filledpage> {
                     paymentType: _paymentType,
                     paymentMethod: _instantPaymentMethod,
                     referenceNumber: _referenceController.text,
+                    biltiNumber: _biltiNumberController.text,
+                    transportCompany: _transportCompanyController.text,
                     createdAt: createdAt,
                     items: items,
                   );
@@ -3145,6 +3172,8 @@ class _filledpageState extends State<filledpage> {
                     mazdoori: _mazdoori,
                     paymentType: _paymentType,
                     referenceNumber: _referenceController.text,
+                    biltiNumber: _biltiNumberController.text,
+                    transportCompany: _transportCompanyController.text,
                     paymentMethod: _instantPaymentMethod,
                     items: items,
                     createdAt: createdAt,
@@ -3164,6 +3193,8 @@ class _filledpageState extends State<filledpage> {
                     paymentType: _paymentType,
                     paymentMethod: _instantPaymentMethod,
                     referenceNumber: _referenceController.text,
+                    biltiNumber: _biltiNumberController.text,
+                    transportCompany: _transportCompanyController.text,
                     createdAt: createdAt,
                     items: items,
                   );

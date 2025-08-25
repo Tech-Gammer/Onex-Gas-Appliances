@@ -63,7 +63,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   void _processFilledData(dynamic data) {
     if (data == null) return;
 
@@ -99,8 +98,6 @@ class FilledProvider with ChangeNotifier {
     return DateTime.now();
   }
 
-
-  // Load next page
   Future<void> loadMoreFilled() async {
     if (_isLoading || !_hasMoreData) return;
 
@@ -139,7 +136,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   Future<int> getNextFilledNumber() async {
     final counterRef = _db.child('filledCounter');
     final transactionResult = await counterRef.runTransaction((currentData) {
@@ -155,13 +151,10 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   bool _isTimestampNumber(String number) {
     // Only consider numbers longer than 10 digits as timestamps
     return number.length > 10 && int.tryParse(number) != null;
   }
-
-
 
   Future<void> saveFilled({
     required String filledId, // Accepts the filled ID (instead of using push)
@@ -174,6 +167,8 @@ class FilledProvider with ChangeNotifier {
     required double grandTotal,
     required String paymentType,
     required String referenceNumber, // Add this
+    required String biltiNumber, // Add this
+    required String transportCompany, // Add this
     String? paymentMethod, // For instant payments
     required String createdAt, // Add this parameter
 
@@ -184,15 +179,6 @@ class FilledProvider with ChangeNotifier {
       if (filledId.isEmpty || filledNumber.isEmpty) {
         throw Exception('Filled ID and number cannot be empty');
       }
-      // final cleanedItems = items.map((item) {
-      //   return {
-      //     'itemName': item['itemName'],
-      //     'rate': item['rate'] ?? 0.0,
-      //     'qty': item['qty'] ?? 0.0,
-      //     'description': item['description'] ?? '',
-      //     'total': item['total'],
-      //   };
-      // }).toList();
       // Filter out empty rows (where itemName is empty)
       final cleanedItems = items.where((item) =>
       (item['itemName'] as String).isNotEmpty
@@ -208,6 +194,8 @@ class FilledProvider with ChangeNotifier {
 
       final filledData = {
         'referenceNumber': referenceNumber, // Add this
+        'biltiNumber': biltiNumber, // Add this
+        'transportCompany': transportCompany, // Add this
         'filledNumber': filledNumber,
         'customerId': customerId,
         'customerName': customerName, // Save customer name here
@@ -264,6 +252,8 @@ class FilledProvider with ChangeNotifier {
     required String paymentType,
     String? paymentMethod,
     required String referenceNumber, // Add this
+    required String biltiNumber, // Add this
+    required String transportCompany, // Add this
     required List<Map<String, dynamic>> items,
     required String createdAt,
   })
@@ -282,17 +272,8 @@ class FilledProvider with ChangeNotifier {
       // Calculate the difference between the old and new grand totals
       final double difference = grandTotal - oldGrandTotal;
 
-      // final cleanedItems = items.map((item) {
-      //   return {
-      //     'itemName': item['itemName'],
-      //     'rate': item['rate'] ?? 0.0,
-      //     'qty': item['qty'] ?? 0.0,
-      //     'description': item['description'] ?? '',
-      //     'total': item['total'],
-      //
-      //   };
-      // }).toList();
-// Filter out empty rows
+
+      // Filter out empty rows
       final cleanedItems = items.where((item) =>
       (item['itemName'] as String).isNotEmpty
       ).map((item) {
@@ -307,6 +288,8 @@ class FilledProvider with ChangeNotifier {
       // Prepare the updated filled data
       final filledData = {
         'referenceNumber': referenceNumber, // Add this
+        'biltiNumber': biltiNumber, // Add this
+        'transportCompany': transportCompany, // Add this
         'filledNumber': filledNumber,
         'customerId': customerId,
         'customerName': customerName,
@@ -438,6 +421,8 @@ class FilledProvider with ChangeNotifier {
     _filled.add({
       'id': key,
       'filledNumber': filledData['filledNumber']?.toString() ?? 'N/A',
+      'biltiNumber': filledData['biltiNumber']?.toString() ?? '', // Add this
+      'transportCompany': filledData['transportCompany']?.toString() ?? '', // Add this
       'customerId': filledData['customerId']?.toString() ?? '',
       'customerName': filledData['customerName']?.toString() ?? 'N/A',
       'subtotal': parseDouble(filledData['subtotal']),
@@ -458,8 +443,6 @@ class FilledProvider with ChangeNotifier {
       'referenceNumber': filledData['referenceNumber']?.toString() ?? '',
     });
   }
-
-
 
   Future<void> deleteFilled(String filledId) async {
     try {
@@ -588,7 +571,6 @@ class FilledProvider with ChangeNotifier {
     }).toList();
   }
 
-
   double _parseToDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is int) return value.toDouble();
@@ -694,7 +676,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   Future<void> payFilledWithSeparateMethod(
       BuildContext context,
       String filledId,
@@ -709,7 +690,8 @@ class FilledProvider with ChangeNotifier {
         DateTime? chequeDate,
         String? chequeBankId,
         String? chequeBankName,
-      }) async {
+      })
+  async {
     try {
       // Fetch the current filled data
       final filledSnapshot = await _db.child('filled').child(filledId).get();
@@ -914,8 +896,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
-
   Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
     try {
       List<Map<String, dynamic>> payments = [];
@@ -972,9 +952,6 @@ class FilledProvider with ChangeNotifier {
       throw Exception('Failed to fetch payments: $e');
     }
   }
-
-
-
 
   Future<void> deletePaymentEntry({
     required BuildContext context,
@@ -1201,7 +1178,8 @@ class FilledProvider with ChangeNotifier {
     DateTime? newChequeDate,
     String? newChequeBankId,
     String? newChequeBankName,
-  }) async {
+  })
+  async {
     try {
       final filledRef = _db.child('filled').child(filledId);
 
@@ -1310,7 +1288,8 @@ class FilledProvider with ChangeNotifier {
     required String customerId,
     required String filledNumber,
     required double amountDifference,
-  }) async {
+  })
+  async {
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
       final snapshot = await customerLedgerRef.orderByChild('createdAt').get();
@@ -1391,9 +1370,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
-  // Add this public method to your FilledProvider class
-
   Future<void> updateCustomerLedger(
       String customerId,
       {double creditAmount = 0.0,
@@ -1405,7 +1381,8 @@ class FilledProvider with ChangeNotifier {
         String? bankId,
         String? bankName,
         String? chequeNumber,
-        String? description}) async {
+        String? description})
+  async {
 
     final ledgerRef = _db.child('filledledger').child(customerId);
 
