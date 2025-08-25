@@ -27,8 +27,6 @@ class _CustomerListState extends State<CustomerList> {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   Map<String, double> _customerBalances = {};
   Map<String, Map<String, dynamic>> _ledgerCache = {}; // Cache for ledger data
-
-  // Payment related variables
   TextEditingController _paymentAmountController = TextEditingController();
   String? _selectedPaymentMethod;
   String? _paymentDescription;
@@ -39,6 +37,7 @@ class _CustomerListState extends State<CustomerList> {
   DateTime? _selectedChequeDate;
   Uint8List? _paymentImage;
   List<Map<String, dynamic>> _cachedBanks = [];
+  ScrollController _scrollController = ScrollController(); // Add this
 
   @override
   void initState() {
@@ -641,53 +640,186 @@ class _CustomerListState extends State<CustomerList> {
               end: Alignment.bottomRight,
             ),
           ),
-        ),        actions: [
-        IconButton(
-          icon: const Icon(Icons.add, color: Colors.white),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => AddCustomer()),
-            );
-          },
         ),
-        IconButton(
-          icon: Icon(Icons.picture_as_pdf,color: Colors.white,),
-          tooltip: languageProvider.isEnglish ? 'Export PDF' : 'پی ڈی ایف ایکسپورٹ کریں',
-          onPressed: () async {
-            final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-            await _generateAndPrintCustomerBalances(customerProvider.customers);
-          },
-        ),
-
-      ],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AddCustomer()),
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.picture_as_pdf, color: Colors.white),
+            tooltip: languageProvider.isEnglish ? 'Export PDF' : 'پی ڈی ایف ایکسپورٹ کریں',
+            onPressed: () async {
+              final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+              await _generateAndPrintCustomerBalances(customerProvider.customers);
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: languageProvider.isEnglish
-                    ? 'Search Customers'
-                    : 'کسٹمر تلاش کریں',
-                prefixIcon: Icon(Icons.search, color: Colors.orange[300]),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value.toLowerCase(); // Update the search query
-                });
-              },
-            ),
+          // Updated Search Bar with Autocomplete
+          Consumer<CustomerProvider>(
+            builder: (context, customerProvider, _) {
+              if (customerProvider.customers.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish
+                            ? 'Search Customers'
+                            : 'کسٹمر تلاش کریں',
+                        prefixIcon: Icon(Icons.search, color: Colors.orange[300]),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(16),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value.toLowerCase();
+                        });
+                      },
+                    ),
+                  ),
+                );
+              }
+
+              return Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Autocomplete<Customer>(
+                    initialValue: TextEditingValue(text: _searchQuery),
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<Customer>.empty();
+                      }
+                      return customerProvider.customers.where((Customer customer) {
+                        return customer.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                            customer.phone.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                            customer.address.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                            customer.city.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                      });
+                    },
+                    displayStringForOption: (Customer customer) =>
+                    '${customer.name} - ${customer.phone}',
+                    fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                      // Update search controller when autocomplete changes
+                      textEditingController.addListener(() {
+                        if (_searchController.text != textEditingController.text) {
+                          _searchController.text = textEditingController.text;
+                          setState(() {
+                            _searchQuery = textEditingController.text.toLowerCase();
+                          });
+                        }
+                      });
+
+                      return TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish
+                              ? 'Search Customers'
+                              : 'کسٹمر تلاش کریں',
+                          prefixIcon: Icon(Icons.search, color: Colors.orange[300]),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.all(16),
+                        ),
+                        onSubmitted: (value) {
+                          onFieldSubmitted();
+                          setState(() {
+                            _searchQuery = value.toLowerCase();
+                          });
+                        },
+                        onChanged: (value) {
+                          setState(() {
+                            _searchQuery = value.toLowerCase();
+                          });
+                        },
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          borderRadius: BorderRadius.circular(8),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxHeight: 200, maxWidth: 400),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (context, index) {
+                                final Customer option = options.elementAt(index);
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Colors.orange,
+                                    child: Text(
+                                      option.name.isNotEmpty ? option.name[0].toUpperCase() : '?',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                  title: Text(option.name),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('${option.phone}'),
+                                      Text('${option.city}'),
+                                      Text(
+                                        'Balance: ${_customerBalances[option.id]?.toStringAsFixed(2) ?? "0.00"}',
+                                        style: TextStyle(
+                                          color: (_customerBalances[option.id] ?? 0.0) > 0
+                                              ? Colors.green
+                                              : Colors.red,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    onSelected(option);
+                                    // Optionally scroll to the selected customer in the list
+                                    _scrollToCustomer(option);
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    onSelected: (Customer selectedCustomer) {
+                      setState(() {
+                        _searchQuery = selectedCustomer.name.toLowerCase();
+                        _searchController.text = selectedCustomer.name;
+                      });
+                      // Optionally perform additional actions like scrolling to the customer
+                      _scrollToCustomer(selectedCustomer);
+                    },
+                  ),
+                ),
+              );
+            },
           ),
+
           Expanded(
             child: Consumer<CustomerProvider>(
               builder: (context, customerProvider, child) {
                 return FutureBuilder(
-                  // future: customerProvider.fetchCustomers(),
                   future: _fetchCustomersAndLoadBalances(customerProvider),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.active ||
@@ -700,9 +832,11 @@ class _CustomerListState extends State<CustomerList> {
                       final name = customer.name.toLowerCase();
                       final phone = customer.phone.toLowerCase();
                       final address = customer.address.toLowerCase();
+                      final city = customer.city.toLowerCase();
                       return name.contains(_searchQuery) ||
                           phone.contains(_searchQuery) ||
-                          address.contains(_searchQuery);
+                          address.contains(_searchQuery) ||
+                          city.contains(_searchQuery);
                     }).toList();
 
                     if (filteredCustomers.isEmpty) {
@@ -716,14 +850,15 @@ class _CustomerListState extends State<CustomerList> {
                       );
                     }
 
-                    // Responsive layout
+                    // Rest of your existing layout code remains the same
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         if (constraints.maxWidth > 600) {
-                          // Web layout (with remaining balance in the table)
+                          // Web layout (existing code)
                           return Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: SingleChildScrollView(
+                              controller: _scrollController, // Add scroll controller
                               child: DataTable(
                                 columns: [
                                   const DataColumn(label: Text('#')),
@@ -763,7 +898,6 @@ class _CustomerListState extends State<CustomerList> {
                                         languageProvider.isEnglish ? 'Actions' : 'عمل',
                                         style: const TextStyle(fontSize: 20),
                                       )),
-
                                   DataColumn(
                                     label: Text(
                                       languageProvider.isEnglish ? 'Item Prices' : 'قیمتیں',
@@ -776,7 +910,6 @@ class _CustomerListState extends State<CustomerList> {
                                       style: TextStyle(fontSize: 20),
                                     ),
                                   ),
-
                                 ],
                                 rows: filteredCustomers
                                     .asMap()
@@ -784,84 +917,88 @@ class _CustomerListState extends State<CustomerList> {
                                     .map((entry) {
                                   final index = entry.key + 1;
                                   final customer = entry.value;
-                                  return
-                                    DataRow(cells: [
-                                      DataCell(Text('$index')),
-                                      DataCell(Text(customer.name)),
-                                      DataCell(Text(customer.address)),
-                                      DataCell(Text(customer.city)),
-                                      DataCell(Text(customer.phone)),
-                                      DataCell(
-                                        Text(
-                                          'Balance: ${_customerBalances[customer.id]?.toStringAsFixed(2) ?? "0.00"}',
-                                          style: const TextStyle(color: Colors.teal),
+                                  return DataRow(
+                                      key: ValueKey(customer.id), // Add key for scrolling
+                                      cells: [
+                                        DataCell(Text('$index')),
+                                        DataCell(Text(customer.name)),
+                                        DataCell(Text(customer.address)),
+                                        DataCell(Text(customer.city)),
+                                        DataCell(Text(customer.phone)),
+                                        DataCell(
+                                          Text(
+                                            'Balance: ${_customerBalances[customer.id]?.toStringAsFixed(2) ?? "0.00"}',
+                                            style: const TextStyle(color: Colors.teal),
+                                          ),
                                         ),
-                                      ),
-                                      DataCell(
-                                        IconButton(
-                                          icon: Icon(Icons.payment, color: Colors.green),
-                                          onPressed: () => _showPaymentDialog(context, customer),
-                                        ),
-                                      ),
-                                      DataCell(Row(
-                                        children: [
+                                        DataCell(
                                           IconButton(
-                                            icon: const Icon(Icons.edit, color: Colors.orange),
+                                            icon: Icon(Icons.payment, color: Colors.green),
+                                            onPressed: () => _showPaymentDialog(context, customer),
+                                          ),
+                                        ),
+                                        DataCell(Row(
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.edit, color: Colors.orange),
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => AddCustomer(customer: customer),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete, color: Colors.red),
+                                              onPressed: () => _showDeleteConfirmationDialog(context, customer, customerProvider),
+                                            ),
+                                          ],
+                                        )),
+                                        DataCell(
+                                          ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.orange,
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            ),
+                                            icon: const Icon(Icons.price_check),
+                                            label: Text(languageProvider.isEnglish ? 'Rates' : 'ریٹس'),
                                             onPressed: () {
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) => AddCustomer(customer: customer), // Pass customer data
+                                                  builder: (context) => CustomerItemPricesPage(
+                                                    customerId: customer.id,
+                                                    customerName: customer.name,
+                                                  ),
                                                 ),
                                               );
                                             },
                                           ),
+                                        ),
+                                        DataCell(
                                           IconButton(
-                                            icon: const Icon(Icons.delete, color: Colors.red),
-                                            onPressed: () => _showDeleteConfirmationDialog(context, customer, customerProvider),
+                                            icon: Icon(Icons.history, color: Colors.blue),
+                                            onPressed: () => _showPaymentHistory(context, customer),
                                           ),
-                                        ],
-                                      )),
-                                      DataCell(
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.orange,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          ),
-                                          icon: const Icon(Icons.price_check),
-                                          label: Text(languageProvider.isEnglish ? 'Rates' : 'ریٹس'),
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => CustomerItemPricesPage(
-                                                  customerId: customer.id,
-                                                  customerName: customer.name,
-                                                ),
-                                              ),
-                                            );
-                                          },
                                         ),
-                                      ),
-                                      DataCell(
-                                        IconButton(
-                                          icon: Icon(Icons.history, color: Colors.blue),
-                                          onPressed: () => _showPaymentHistory(context, customer),
-                                        ),
-                                      ),
-                                    ]);
+                                      ]
+                                  );
                                 }).toList(),
                               ),
                             ),
                           );
                         } else {
-                          // Mobile layout (with remaining balance in the card)
+                          // Mobile layout (existing code remains the same)
                           return ListView.builder(
+                            controller: _scrollController, // Add scroll controller
                             itemCount: filteredCustomers.length,
                             itemBuilder: (context, index) {
                               final customer = filteredCustomers[index];
                               return Card(
+                                key: ValueKey(customer.id), // Add key for scrolling
                                 elevation: 4,
                                 margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                                 color: Colors.orange.shade50,
@@ -940,6 +1077,33 @@ class _CustomerListState extends State<CustomerList> {
         ],
       ),
     );
+  }
+
+  // Add this new method for scrolling to a specific customer
+  void _scrollToCustomer(Customer targetCustomer) {
+    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    final customers = customerProvider.customers;
+
+    final index = customers.indexWhere((customer) => customer.id == targetCustomer.id);
+    if (index != -1) {
+      // For DataTable (web layout)
+      if (MediaQuery.of(context).size.width > 600) {
+        final position = index * 56.0; // Approximate row height
+        _scrollController.animateTo(
+          position,
+          duration: Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        // For ListView (mobile layout)
+        final position = index * 120.0; // Approximate card height
+        _scrollController.animateTo(
+          position,
+          duration: Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
   }
 
   void _showDeleteConfirmationDialog(

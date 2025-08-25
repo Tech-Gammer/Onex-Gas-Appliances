@@ -291,8 +291,8 @@ class _AddCustomerState extends State<AddCustomer> {
           _openingBalanceDate,
         );
       } else {
-        // Add new customer
-        customerProvider.addCustomer(
+        // Add new customer with serial number
+        customerProvider.addCustomerWithSerial(
           _nameController.text,
           _addressController.text,
           _phoneController.text,
@@ -304,6 +304,8 @@ class _AddCustomerState extends State<AddCustomer> {
       Navigator.pop(context);
     }
   }
+
+
 
   @override
   void dispose() {
