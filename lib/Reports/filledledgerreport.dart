@@ -225,8 +225,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 level: 1,
                 child: pw.Text('Transaction Details'),
               ),
-              // _buildPDFTransactionTable(provider, languageProvider),
-              // _buildPDFTransactionTable(provider, languageProvider, totalDebit, totalCredit, finalBalance),
               _buildPDFTransactionTable(provider, languageProvider),
 
             ];
@@ -251,6 +249,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
   {
     final openingBalanceDisplay = provider.displayOpeningBalance;
     final transactions = provider.transactions ?? [];
+    final DateTime? openingBalanceDate = provider.displayOpeningBalanceDate;
 
     // Calculate totals the same way as in the UI summary cards
     double totalDebit = provider.report['debit']?.toDouble() ?? 0.0;
@@ -282,53 +281,39 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       ),
     );
 
-    // 👉 Opening Balance row
-    // Opening/Previous Balance row - only show if there's a balance or not filtered
-    if (openingBalanceDisplay != 0 || !provider.isFiltered) {
-      rows.add(
-        pw.Container(
-          padding: const pw.EdgeInsets.all(6),
-          decoration: pw.BoxDecoration(color: PdfColors.grey100),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              _buildPdfDataCell(
-                provider.displayOpeningBalanceDate != null
-                    ? DateFormat('dd MMM yyyy').format(provider.displayOpeningBalanceDate!)
-                    : '-',
-                60,
-              ),
-              _buildPdfDataCell(
-                languageProvider.isEnglish
-                    ? provider.openingBalanceLabel
-                    : (provider.isFiltered ? 'پچھلا بیلنس' : 'ابتدائی بیلنس'),
-                80,
-              ),
-              _buildPdfDataCell('-', 50),
-              _buildPdfDataCell('-', 60),
-              _buildPdfDataCell('-', 70),
-              _buildPdfDataCell('-', 50),
-              _buildPdfDataCell(
-                'Rs ${openingBalanceDisplay.toStringAsFixed(2)}',
-                50,
-                textColor: openingBalanceDisplay > 0 ? PdfColors.green : PdfColors.red,
-                fontWeight: pw.FontWeight.bold,
-              ),
-              _buildPdfDataCell(
-                'Rs ${openingBalanceDisplay.toStringAsFixed(2)}',
-                60,
-                textColor: openingBalanceDisplay > 0 ? PdfColors.green : PdfColors.red,
-                fontWeight: pw.FontWeight.bold,
-              ),
-            ],
-          ),
-        ),
-      );
+    // Sort transactions by date
+    List<Map<String, dynamic>> sortedTransactions = List.from(transactions);
+    sortedTransactions.sort((a, b) {
+      final dateA = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(2000);
+      final dateB = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(2000);
+      return dateA.compareTo(dateB);
+    });
+
+    bool openingBalanceAdded = false;
+
+    // Add opening balance at the correct chronological position
+    if ((openingBalanceDisplay != 0 || !provider.isFiltered) && openingBalanceDate != null) {
+      // Check if opening balance should be the first row
+      if (sortedTransactions.isEmpty ||
+          openingBalanceDate.isBefore(DateTime.tryParse(sortedTransactions.first['date']?.toString() ?? '') ?? DateTime(2000))) {
+        rows.add(_buildOpeningBalancePdfRow(provider, languageProvider, openingBalanceDisplay));
+        openingBalanceAdded = true;
+      }
     }
 
-    // 👉 Transactions
-    for (var transaction in transactions) {
+    // Add transactions
+    for (var transaction in sortedTransactions) {
       final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
+
+      // Insert opening balance if it belongs between transactions
+      if (!openingBalanceAdded &&
+          openingBalanceDate != null &&
+          openingBalanceDate.isBefore(date) &&
+          (openingBalanceDisplay != 0 || !provider.isFiltered)) {
+        rows.add(_buildOpeningBalancePdfRow(provider, languageProvider, openingBalanceDisplay));
+        openingBalanceAdded = true;
+      }
+
       final details = transaction['details']?.toString() ??
           transaction['referenceNumber']?.toString() ??
           transaction['filledNumber']?.toString() ??
@@ -494,6 +479,11 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       }
     }
 
+    // Add opening balance at the end if it wasn't added yet (for cases where opening balance date is after all transactions)
+    if (!openingBalanceAdded && (openingBalanceDisplay != 0 || !provider.isFiltered) && openingBalanceDate != null) {
+      rows.add(_buildOpeningBalancePdfRow(provider, languageProvider, openingBalanceDisplay));
+    }
+
     // Add summary row at the end - using the same calculation as UI summary cards
     rows.add(
       pw.Container(
@@ -542,6 +532,50 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     return pw.Column(children: rows);
   }
 
+// Helper method to build opening balance row for PDF
+  pw.Widget _buildOpeningBalancePdfRow(
+      FilledCustomerReportProvider provider,
+      LanguageProvider languageProvider,
+      double openingBalanceDisplay) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(6),
+      decoration: pw.BoxDecoration(color: PdfColors.grey100),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          _buildPdfDataCell(
+            provider.displayOpeningBalanceDate != null
+                ? DateFormat('dd MMM yyyy').format(provider.displayOpeningBalanceDate!)
+                : '-',
+            60,
+          ),
+          _buildPdfDataCell(
+            languageProvider.isEnglish
+                ? provider.openingBalanceLabel
+                : (provider.isFiltered ? 'پچھلا بیلنس' : 'ابتدائی بیلنس'),
+            80,
+          ),
+          _buildPdfDataCell('-', 50),
+          _buildPdfDataCell('-', 60),
+          _buildPdfDataCell('-', 70),
+          _buildPdfDataCell('-', 50),
+          _buildPdfDataCell(
+            'Rs ${openingBalanceDisplay.toStringAsFixed(2)}',
+            50,
+            textColor: openingBalanceDisplay > 0 ? PdfColors.green : PdfColors.red,
+            fontWeight: pw.FontWeight.bold,
+          ),
+          _buildPdfDataCell(
+            'Rs ${openingBalanceDisplay.toStringAsFixed(2)}',
+            60,
+            textColor: openingBalanceDisplay > 0 ? PdfColors.green : PdfColors.red,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ],
+      ),
+    );
+  }
+
   pw.Widget _buildPdfHeaderCell(String text, double width) {
     return pw.Container(
       width: width,
@@ -566,7 +600,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       double width, {
         PdfColor? textColor,
         pw.FontWeight? fontWeight,
-      }) {
+      })
+  {
     return pw.Container(
       width: width,
       padding: const pw.EdgeInsets.all(6),
@@ -1114,6 +1149,21 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
   {
     final displayBalance = reportProvider.displayOpeningBalance;
 
+    // Create a list to hold all rows (opening balance + transactions)
+    List<Widget> allRows = [];
+
+    // Sort transactions by date to ensure proper chronological order
+    List<Map<String, dynamic>> sortedTransactions = List.from(transactions);
+    sortedTransactions.sort((a, b) {
+      final dateA = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(2000);
+      final dateB = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(2000);
+      return dateA.compareTo(dateB);
+    });
+
+    // Find the position where opening balance should be inserted
+    DateTime? openingBalanceDate = reportProvider.displayOpeningBalanceDate;
+    bool openingBalanceInserted = false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1137,71 +1187,109 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           ),
         ),
 
-        // Opening/Previous Balance Row - only show if there's a balance to show
-        if (displayBalance != 0 || !reportProvider.isFiltered)
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              border: Border(
-                bottom: BorderSide(color: Colors.grey[300]!),
-                left: BorderSide(color: Colors.grey[300]!),
-                right: BorderSide(color: Colors.grey[300]!),
-              ),
-            ),
-            child: Row(
-              children: [
-                _buildExpandedDataCell(
-                  reportProvider.displayOpeningBalanceDate != null
-                      ? DateFormat('dd MMM yyyy').format(reportProvider.displayOpeningBalanceDate!)
-                      : '-',
-                  1,
-                  isMobile,
-                ),
-                _buildExpandedDataCell(
-                  languageProvider.isEnglish
-                      ? reportProvider.openingBalanceLabel
-                      : (reportProvider.isFiltered ? 'پچھلا بیلنس' : 'ابتدائی بیلنس'),
-                  2,
-                  isMobile,
-                ),
-                _buildExpandedDataCell('-', 1, isMobile),
-                _buildExpandedDataCell('-', 1.5, isMobile),
-                _buildExpandedDataCell('-', 2, isMobile),
-                _buildExpandedDataCell('-', 1, isMobile),
-                _buildExpandedDataCell(
-                  'Rs ${displayBalance.toStringAsFixed(2)}',
-                  1,
-                  isMobile,
-                  fontWeight: FontWeight.bold,
-                  textColor: displayBalance > 0 ? Colors.green : Colors.red,
-                ),
-                _buildExpandedDataCell(
-                  'Rs ${displayBalance.toStringAsFixed(2)}',
-                  1,
-                  isMobile,
-                  fontWeight: FontWeight.bold,
-                  textColor: displayBalance > 0 ? Colors.green : Colors.red,
-                ),
-              ],
-            ),
-          ),
+        // Build rows with opening balance inserted at correct chronological position
+        ...(() {
+          List<Widget> rows = [];
 
-        ...transactions.expand((transaction) {
-          List<Widget> rowWidgets = [];
-          rowWidgets.add(_buildExpandedTransactionRow(transaction, reportProvider, isMobile, languageProvider));
+          for (int i = 0; i < sortedTransactions.length; i++) {
+            final transaction = sortedTransactions[i];
+            final transactionDate = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
 
-          final isInvoice = (transaction['credit'] ?? 0) != 0;
-          final transactionKey = transaction['key']?.toString() ?? '';
-          final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);
+            // Insert opening balance row if it should come before this transaction
+            if (!openingBalanceInserted &&
+                (displayBalance != 0 || !reportProvider.isFiltered) &&
+                openingBalanceDate != null &&
+                openingBalanceDate.isBefore(transactionDate)) {
 
-          if (isInvoice && isExpanded) {
-            final date = DateTime.tryParse(transaction['date']?.toString() ?? '') ?? DateTime(2000);
-            rowWidgets.add(_buildInvoiceItems(transactionKey, reportProvider, date));
+              rows.add(_buildOpeningBalanceRow(reportProvider, languageProvider, isMobile));
+              openingBalanceInserted = true;
+            }
+
+            // Add the transaction row
+            rows.add(_buildExpandedTransactionRow(transaction, reportProvider, isMobile, languageProvider));
+
+            // Add invoice items if expanded
+            final isInvoice = (transaction['credit'] ?? 0) != 0;
+            final transactionKey = transaction['key']?.toString() ?? '';
+            final isExpanded = reportProvider.expandedTransactions.contains(transactionKey);
+
+            if (isInvoice && isExpanded) {
+              rows.add(_buildInvoiceItems(transactionKey, reportProvider, transactionDate));
+            }
           }
 
-          return rowWidgets;
-        }).toList(),
+          // If opening balance hasn't been inserted yet, add it at the end
+          // This handles cases where opening balance date is after all transactions
+          // or when there are no transactions
+          if (!openingBalanceInserted && (displayBalance != 0 || !reportProvider.isFiltered)) {
+            if (sortedTransactions.isEmpty) {
+              // No transactions, so opening balance goes first
+              rows.insert(0, _buildOpeningBalanceRow(reportProvider, languageProvider, isMobile));
+            } else {
+              // Opening balance date is after all transactions
+              rows.add(_buildOpeningBalanceRow(reportProvider, languageProvider, isMobile));
+            }
+          }
+
+          return rows;
+        })(),
       ],
+    );
+  }
+
+// Extract opening balance row into a separate method for reusability
+  Widget _buildOpeningBalanceRow(
+      FilledCustomerReportProvider reportProvider,
+      LanguageProvider languageProvider,
+      bool isMobile,
+      ) {
+    final displayBalance = reportProvider.displayOpeningBalance;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[300]!),
+          left: BorderSide(color: Colors.grey[300]!),
+          right: BorderSide(color: Colors.grey[300]!),
+        ),
+      ),
+      child: Row(
+        children: [
+          _buildExpandedDataCell(
+            reportProvider.displayOpeningBalanceDate != null
+                ? DateFormat('dd MMM yyyy').format(reportProvider.displayOpeningBalanceDate!)
+                : '-',
+            1,
+            isMobile,
+          ),
+          _buildExpandedDataCell(
+            languageProvider.isEnglish
+                ? reportProvider.openingBalanceLabel
+                : (reportProvider.isFiltered ? 'پچھلا بیلنس' : 'ابتدائی بیلنس'),
+            2,
+            isMobile,
+          ),
+          _buildExpandedDataCell('-', 1, isMobile),
+          _buildExpandedDataCell('-', 1.5, isMobile),
+          _buildExpandedDataCell('-', 2, isMobile),
+          _buildExpandedDataCell('-', 1, isMobile),
+          _buildExpandedDataCell(
+            'Rs ${displayBalance.toStringAsFixed(2)}',
+            1,
+            isMobile,
+            fontWeight: FontWeight.bold,
+            textColor: displayBalance > 0 ? Colors.green : Colors.red,
+          ),
+          _buildExpandedDataCell(
+            'Rs ${displayBalance.toStringAsFixed(2)}',
+            1,
+            isMobile,
+            fontWeight: FontWeight.bold,
+            textColor: displayBalance > 0 ? Colors.green : Colors.red,
+          ),
+        ],
+      ),
     );
   }
 
