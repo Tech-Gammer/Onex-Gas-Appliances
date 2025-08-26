@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:onex_gas_appliances/Customer/paymenthistorypage.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -981,7 +982,14 @@ class _CustomerListState extends State<CustomerList> {
                                         DataCell(
                                           IconButton(
                                             icon: Icon(Icons.history, color: Colors.blue),
-                                            onPressed: () => _showPaymentHistory(context, customer),
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => CustomerPaymentHistoryPage(customer: customer),
+                                                ),
+                                              );
+                                            },
                                           ),
                                         ),
                                       ]

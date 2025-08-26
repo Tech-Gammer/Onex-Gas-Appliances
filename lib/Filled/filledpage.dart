@@ -24,7 +24,6 @@ import 'dart:html' as html;
 import '../bankmanagement/banknames.dart';
 
 
-
 class filledpage extends StatefulWidget {
   final Map<String, dynamic>? filled; // Optional filled data for editingss
 
@@ -48,7 +47,6 @@ class _filledpageState extends State<filledpage> {
   TextEditingController _discountController = TextEditingController();
   List<Map<String, dynamic>> _filledRows = [];
   String? _filledId; // For editing existing filled
-  // late bool _isReadOnly;
   bool _isReadOnly = false; // Initialize with default value
   bool _isButtonPressed = false;
   final TextEditingController _customerController = TextEditingController();
@@ -60,7 +58,6 @@ class _filledpageState extends State<filledpage> {
   bool _isSaved = false;
   Map<String, dynamic>? _currentFilled;
   List<Map<String, dynamic>> _cachedBanks = [];
-  // In your _filledpageState class
   double _mazdoori = 0.0;
   TextEditingController _mazdooriController = TextEditingController();
   String? _selectedBankId;
@@ -74,37 +71,36 @@ class _filledpageState extends State<filledpage> {
   final TextEditingController _autoReferenceController = TextEditingController();
   TextEditingController _biltiNumberController = TextEditingController();
   TextEditingController _transportCompanyController = TextEditingController();
+  String? _selectedCustomerSerial;
+  Map<String, int> _customerLastNumbers = {};
+  String? _lastReferenceNumber;
 
-  Future<String> _generateAutoReferenceNumber({bool increment = true}) async {
-    // Get the last used number from Firebase
-    final counterRef = _db.child('autoReferenceCounter');
+
+  Future<String> _generateCustomerSerialReference({bool increment = true}) async {
+    if (_selectedCustomerId == null || _selectedCustomerSerial == null) {
+      return 'Unknown-0001';
+    }
+
+    // Get the last used number for this customer from Firebase
+    final counterRef = _db.child('customerReferenceCounters').child(_selectedCustomerId!);
     final snapshot = await counterRef.get();
 
+    int lastNumber = 0;
     if (snapshot.exists) {
-      final data = snapshot.value as Map<dynamic, dynamic>;
-      _prefix = data['prefix'] ?? 'A';
-      _lastNumber = data['lastNumber'] ?? 0;
+      final data = snapshot.value;
+      lastNumber = (data is int) ? data : (data as Map?)?['lastNumber'] ?? 0;
     }
 
     if (increment) {
-      _lastNumber++;
+      lastNumber++;
     }
 
-    // If number exceeds 9999, reset and increment prefix
-    if (_lastNumber > 9999) {
-      _lastNumber = 1;
-      _prefix = String.fromCharCode(_prefix.codeUnitAt(0) + 1);
-    }
-
-    // Save the new counter values only if incrementing
+    // Save the new counter value only if incrementing
     if (increment) {
-      await counterRef.set({
-        'prefix': _prefix,
-        'lastNumber': _lastNumber,
-      });
+      await counterRef.set(lastNumber);
     }
 
-    return '$_prefix-${_lastNumber.toString().padLeft(4, '0')}';
+    return '${_selectedCustomerSerial}-${lastNumber.toString().padLeft(4, '0')}';
   }
 
   Future<void> _toggleReferenceMode(bool isAuto) async {
@@ -112,13 +108,23 @@ class _filledpageState extends State<filledpage> {
       _isAutoReference = isAuto;
     });
 
-    if (isAuto) {
+    if (isAuto && _selectedCustomerId != null && _selectedCustomerSerial != null) {
       // Generate without incrementing the counter
-      final autoRef = await _generateAutoReferenceNumber(increment: false);
+      final autoRef = await _generateNextReferenceNumber(increment: false);
       _autoReferenceController.text = autoRef;
       _referenceController.text = autoRef;
-    } else {
+    } else if (!isAuto) {
       _referenceController.text = '';
+    }
+  }
+
+  Future<void> _onCustomerChanged() async {
+    if (_isAutoReference && _selectedCustomerId != null && _selectedCustomerSerial != null) {
+      final autoRef = await _generateNextReferenceNumber(increment: false);
+      setState(() {
+        _autoReferenceController.text = autoRef;
+        _referenceController.text = autoRef;
+      });
     }
   }
 
@@ -358,43 +364,44 @@ class _filledpageState extends State<filledpage> {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Image(image, width: 80, height: 80), // Adjust logo size
+                  pw.Image(image, width: 120, height: 120), // Adjust logo size
                   pw.Column(
                       children: [
                         pw.Text(
-                          'Fast Colour Printers',
+                          'Onex Gas Appliances',
                           style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
                         ),
-                        pw.Text(
-                          'Peoples Colony, Underpass, Gujranwala,PK',
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        ),
+                        // pw.Text(
+                        //   'Peoples Colony, Underpass, Gujranwala,PK',
+                        //   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        // ),
                         // pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
                         // pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
                       ]
                   ),
-                  pw.Column(
-                      children: [
-                        pw.Text(
-                          'Invoice',
-                          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                        ),
-                        pw.Text(
-                          'M. Zeeshan',
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        ),
-                        pw.Text(
-                          '0300-6400717',
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        ),
-                      ]
-                  )//s
+                  // pw.Column(
+                  //     children: [
+                  //       pw.Text(
+                  //         'Invoice',
+                  //         style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                  //       ),
+                  //       pw.Text(
+                  //         'M. Zeeshan',
+                  //         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  //       ),
+                  //       pw.Text(
+                  //         '0300-6400717',
+                  //         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  //       ),
+                  //     ]
+                  // )//s
                 ],
               ),
               pw.Divider(),
 
               // Customer Information
               pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 11)),
+              // pw.Text('Customer Serial: ${selectedCustomer.customerSerial}', style: const pw.TextStyle(fontSize: 11)),
               pw.Text('Customer Address: ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 11)),
               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 11)),
 
@@ -668,48 +675,6 @@ class _filledpageState extends State<filledpage> {
       }
     } catch (e) {
       print("Error updating qtyOnHand: $e");
-    }
-  }
-
-  Future<void> _savePDF(String filledNumber) async {
-    try {
-      final bytes = await _generatePDFBytes(filledNumber);
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/filled_$filledNumber.pdf');
-      await file.writeAsBytes(bytes);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('PDF saved to ${file.path}'),
-        ),
-      );
-    } catch (e) {
-      print("Error saving PDF: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save PDF: ${e.toString()}')),
-      );
-    }
-  }
-
-  Future<void> _sharePDFViaWhatsApp(String filledNumber) async {
-    try {
-      final bytes = await _generatePDFBytes(filledNumber);
-
-      final blob = html.Blob([bytes]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', 'filled_$filledNumber.pdf')
-        ..click();
-      html.Url.revokeObjectUrl(url);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF download started')),
-      );
-    } catch (e) {
-      print('Error sharing PDF: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to share PDF: ${e.toString()}')),
-      );
     }
   }
 
@@ -1590,17 +1555,20 @@ class _filledpageState extends State<filledpage> {
     super.initState();
 
     _fetchItems();
+    _initializeReferenceNumber();
+
     // Add these initializations
     _biltiNumberController = TextEditingController();
     _transportCompanyController = TextEditingController();
+
     // Initialize _currentFilled with passed data or default structure
     _currentFilled = widget.filled ?? {
       'filledNumber': null,
       'customerId': '',
       'customerName': '',
       'referenceNumber': '',
-      'biltiNumber': '', // Add this
-      'transportCompany': '', // Add this
+      'biltiNumber': '',
+      'transportCompany': '',
       'items': [],
       'subtotal': 0.0,
       'discount': 0.0,
@@ -1617,17 +1585,17 @@ class _filledpageState extends State<filledpage> {
 
     // Initialize date controller
     if (widget.filled != null && widget.filled!['createdAt'] != null) {
-      // Parse the existing date
       DateTime filledDate = DateTime.parse(widget.filled!['createdAt']);
       _dateController.text = DateFormat('yyyy-MM-dd').format(filledDate);
     } else {
-      // Set to current date for new invoices
       _dateController.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
     }
+
     if (widget.filled != null) {
       _biltiNumberController.text = widget.filled!['biltiNumber']?.toString() ?? '';
       _transportCompanyController.text = widget.filled!['transportCompany']?.toString() ?? '';
     }
+
     // Safe controller initialization
     _mazdooriController.text =
         (_currentFilled!['mazdoori'] as num?)?.toStringAsFixed(2) ?? '0.00';
@@ -1637,50 +1605,117 @@ class _filledpageState extends State<filledpage> {
 
     // Initialize reference number handling
     if (widget.filled != null && widget.filled!['referenceNumber'] != null) {
-      // For existing filleds, use the saved reference number in manual mode
       _referenceController.text = widget.filled!['referenceNumber'];
       _isAutoReference = false;
     } else {
-      // For new filleds, default to auto mode and generate reference
       _isAutoReference = true;
-      _generateAutoReferenceNumber().then((autoRef) {
-        if (mounted) {
-          setState(() {
-            _autoReferenceController.text = autoRef;
-            _referenceController.text = autoRef;
-          });
-        }
-      });
     }
 
     // Payment type handling
     _paymentType = _currentFilled!['paymentType']?.toString() ?? 'instant';
     _instantPaymentMethod = _currentFilled!['paymentMethod']?.toString();
 
-    // Initialize customer provider with null checks
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    customerProvider.fetchCustomers().then((_) {
-      final customerId = _currentFilled!['customerId']?.toString();
+    // Initialize customer data if editing existing invoice
+    if (widget.filled != null && widget.filled!['customerId'] != null) {
+      final customerId = widget.filled!['customerId'].toString();
+      final customerName = widget.filled!['customerName']?.toString() ?? '';
 
-      if (customerId != null && customerId.isNotEmpty) {
+      // Use a post-frame callback to ensure customer provider is ready
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
         final customer = customerProvider.customers.firstWhere(
               (c) => c.id == customerId,
-          orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '',city: ''),
+          orElse: () => Customer(
+            id: customerId,
+            name: customerName,
+            phone: '',
+            address: '',
+            city: '',
+            customerSerial: widget.filled!['customerSerial']?.toString() ?? '',
+          ),
         );
 
         if (mounted) {
           setState(() {
-            _selectedCustomerId = customer.id;
-            _selectedCustomerName = customer.name;
+            _selectedCustomerId = customerId;
+            _selectedCustomerName = customerName;
+            _selectedCustomerSerial = customer.customerSerial;
           });
+          _fetchCustomerPrices(customerId);
+          _fetchRemainingBalance();
+          _fetchCustomerSerial(customerId);
+          _onCustomerChanged();
         }
-
-        _fetchRemainingBalance();
-      }
-    });
+      });
+    }
 
     // Initialize rows safely
     _initializeRows();
+  }
+
+  Future<void> _initializeReferenceNumber() async {
+    if (_selectedCustomerId != null && _selectedCustomerSerial != null) {
+      // Get the last reference number for this customer
+      final lastRef = await Provider.of<FilledProvider>(context, listen: false)
+          .getLastReferenceNumber(_selectedCustomerId!);
+
+      setState(() {
+        _lastReferenceNumber = lastRef;
+      });
+
+      if (_isAutoReference) {
+        // Generate the next reference number without saving it yet
+        final nextRef = await _generateNextReferenceNumber(increment: false);
+        _autoReferenceController.text = nextRef;
+        _referenceController.text = nextRef;
+      }
+    }
+  }
+
+  Future<String> _generateNextReferenceNumber({bool increment = true}) async {
+    if (_selectedCustomerId == null || _selectedCustomerSerial == null) {
+      return 'Unknown-0001';
+    }
+
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+
+    if (increment) {
+      // Get and increment the reference number
+      final nextNumber = await filledProvider.getNextReferenceNumber(
+          _selectedCustomerId!,
+          _selectedCustomerSerial!
+      );
+      return '${_selectedCustomerSerial}-${nextNumber.toString().padLeft(4, '0')}';
+    } else {
+      // Just get the current number without incrementing
+      final lastRef = await filledProvider.getLastReferenceNumber(_selectedCustomerId!);
+
+      if (lastRef.isNotEmpty) {
+        // Extract the number from the last reference and increment by 1 for display
+        final parts = lastRef.split('-');
+        if (parts.length == 2) {
+          final lastNumber = int.tryParse(parts[1]) ?? 0;
+          return '${_selectedCustomerSerial}-${(lastNumber + 1).toString().padLeft(4, '0')}';
+        }
+      }
+
+      // No previous reference found, start from 1
+      return '${_selectedCustomerSerial}-0001';
+    }
+  }
+
+  void _fetchCustomerSerial(String customerId) async {
+    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    final customer = customerProvider.customers.firstWhere(
+          (c) => c.id == customerId,
+      orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '', city: ''),
+    );
+
+    if (customer.id.isNotEmpty) {
+      setState(() {
+        _selectedCustomerSerial = customer.customerSerial;
+      });
+    }
   }
 
   void _initializeRows() {
@@ -2216,7 +2251,9 @@ class _filledpageState extends State<filledpage> {
                   Expanded(
                     child: _buildTextField(
                       controller: _isAutoReference ? _autoReferenceController : _referenceController,
-                      label: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+                      label: _isAutoReference
+                          ? (languageProvider.isEnglish ? 'Auto Reference (Customer-Serial)' : 'آٹو ریفرنس (کسٹمر-سیریل)')
+                          : (languageProvider.isEnglish ? 'Manual Reference Number' : 'دستی ریفرنس نمبر'),
                       icon: Icons.tag,
                       readOnly: _isAutoReference,
                     ),
@@ -2317,6 +2354,43 @@ class _filledpageState extends State<filledpage> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
+                // Initialize customer data if editing existing invoice
+                if (widget.filled != null &&
+                    widget.filled!['customerId'] != null &&
+                    _selectedCustomerId == null) {
+                  final customerId = widget.filled!['customerId'].toString();
+                  final customerName = widget.filled!['customerName']?.toString() ?? '';
+
+                  // Find the customer in the provider
+                  final customer = customerProvider.customers.firstWhere(
+                        (c) => c.id == customerId,
+                    orElse: () => Customer(
+                      id: customerId,
+                      name: customerName,
+                      phone: '',
+                      address: '',
+                      city: '',
+                      customerSerial: widget.filled!['customerSerial']?.toString() ?? '',
+                    ),
+                  );
+
+                  // Set the selected customer data
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _selectedCustomerId = customerId;
+                        _selectedCustomerName = customerName;
+                        _selectedCustomerSerial = customer.customerSerial;
+                        _customerController.text = customerName;
+                      });
+                      _fetchCustomerPrices(customerId);
+                      _fetchRemainingBalance();
+                      _fetchCustomerSerial(customerId);
+                      _onCustomerChanged();
+                    }
+                  });
+                }
+
                 return Column(
                   children: [
                     Container(
@@ -2337,7 +2411,12 @@ class _filledpageState extends State<filledpage> {
                         displayStringForOption: (Customer customer) => customer.name,
                         fieldViewBuilder: (BuildContext context, TextEditingController textEditingController,
                             FocusNode focusNode, VoidCallback onFieldSubmitted) {
-                          _customerController.text = _selectedCustomerName ?? '';
+
+                          // Initialize the controller with selected customer name
+                          if (_selectedCustomerName != null && textEditingController.text.isEmpty) {
+                            textEditingController.text = _selectedCustomerName!;
+                          }
+
                           return TextField(
                             controller: textEditingController,
                             focusNode: focusNode,
@@ -2363,10 +2442,13 @@ class _filledpageState extends State<filledpage> {
                           setState(() {
                             _selectedCustomerId = selectedCustomer.id;
                             _selectedCustomerName = selectedCustomer.name;
+                            _selectedCustomerSerial = selectedCustomer.customerSerial;
                             _customerController.text = selectedCustomer.name;
                           });
                           _fetchCustomerPrices(selectedCustomer.id);
                           _fetchRemainingBalance();
+                          _fetchCustomerSerial(selectedCustomer.id);
+                          _onCustomerChanged();
                         },
                         optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
                             Iterable<Customer> options) {
@@ -2384,6 +2466,9 @@ class _filledpageState extends State<filledpage> {
                                     final Customer customer = options.elementAt(index);
                                     return ListTile(
                                       title: Text(customer.name),
+                                      subtitle: customer.phone.isNotEmpty
+                                          ? Text(customer.phone)
+                                          : null,
                                       onTap: () => onSelected(customer),
                                     );
                                   },
@@ -2396,10 +2481,29 @@ class _filledpageState extends State<filledpage> {
                     ),
                     const SizedBox(height: 12),
                     if (_selectedCustomerName != null)
-                      _buildInfoRow(
-                        languageProvider.isEnglish ? 'Selected Customer:' : 'منتخب کسٹمر:',
-                        _selectedCustomerName!,
-                        icon: Icons.person,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoRow(
+                            languageProvider.isEnglish ? 'Selected Customer:' : 'منتخب کسٹمر:',
+                            _selectedCustomerName!,
+                            icon: Icons.person,
+                          ),
+                          if (_selectedCustomerSerial != null && _selectedCustomerSerial!.isNotEmpty)
+                            _buildInfoRow(
+                              languageProvider.isEnglish ? 'Customer Serial:' : 'کسٹمر سیریل:',
+                              _selectedCustomerSerial!,
+                              icon: Icons.confirmation_number,
+                              color: Colors.blue[700],
+                            ),
+                          if (_lastReferenceNumber != null && _lastReferenceNumber!.isNotEmpty)
+                            _buildInfoRow(
+                              languageProvider.isEnglish ? 'Last Reference:' : 'آخری ریفرنس:',
+                              _lastReferenceNumber!,
+                              icon: Icons.history,
+                              color: Colors.blueGrey,
+                            )
+                        ],
                       ),
                     if (_remainingBalance != null)
                       _buildInfoRow(
@@ -2930,7 +3034,26 @@ class _filledpageState extends State<filledpage> {
 
               try {
                 // Validate reference number
-                if (_referenceController.text.isEmpty) {
+                // if (_referenceController.text.isEmpty) {
+                //   ScaffoldMessenger.of(context).showSnackBar(
+                //     SnackBar(
+                //       content: Text(
+                //         languageProvider.isEnglish
+                //             ? 'Please enter a reference number'
+                //             : 'براہ کرم رفرنس نمبر درج کریں',
+                //       ),
+                //     ),
+                //   );
+                //   setState(() => _isButtonPressed = false);
+                //   return;
+                // }
+                // In your save button onPressed method
+                if (_isAutoReference && (_selectedCustomerId != null && _selectedCustomerSerial != null)) {
+                  // Generate and use the auto reference number
+                  final autoRef = await _generateNextReferenceNumber(increment: true);
+                  _referenceController.text = autoRef;
+                } else if (_referenceController.text.isEmpty) {
+                  // Manual mode but no reference entered
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -3138,8 +3261,10 @@ class _filledpageState extends State<filledpage> {
                 // Always save as new fill when coming from quotation
                 if (widget.filled?['isFromQuotation'] ?? false) {
                   // Only increment when saving a new invoice
-                  final autoRef = await _generateAutoReferenceNumber(increment: true);
-                  _referenceController.text = autoRef;
+                  if (_isAutoReference && (_selectedCustomerId != null && _selectedCustomerSerial != null)) {
+                    final autoRef = await _generateCustomerSerialReference(increment: true);
+                    _referenceController.text = autoRef;
+                  }
 
                   await filledProvider.saveFilled(
                     filledId: filledNumber,
@@ -3279,7 +3404,8 @@ class _filledpageState extends State<filledpage> {
     int maxLines = 1,
     Function(String)? onChanged,
     VoidCallback? onTap,
-  }) {
+  })
+  {
     return TextField(
       controller: controller,
       readOnly: readOnly,
@@ -3448,6 +3574,7 @@ class CustomAutocomplete extends StatelessWidget {
           },
         );
       },
+      // In the CustomAutocomplete widget, update the optionsViewBuilder to show serial numbers:
       optionsViewBuilder: (context, onSelected, options) {
         return Material(
           elevation: 4,
@@ -3467,9 +3594,18 @@ class CustomAutocomplete extends StatelessWidget {
 
               return ListTile(
                 title: Text(option.itemName),
-                subtitle: isSpecialPrice
-                    ? Text('Special Price for Customer')
-                    : null,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (option.customerSerial != null && option.customerSerial!.isNotEmpty)
+                      Text(
+                        'Serial: ${option.customerSerial}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    if (isSpecialPrice)
+                      Text('Special Price for Customer'),
+                  ],
+                ),
                 trailing: Text(
                   '${displayPrice.toStringAsFixed(2)}rs',
                   style: TextStyle(

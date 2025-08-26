@@ -25,6 +25,60 @@ class FilledProvider with ChangeNotifier {
   String? _selectedChequeBankName;
   TextEditingController _chequeNumberController = TextEditingController();
   DateTime? _selectedChequeDate;
+  final DatabaseReference _referenceCounterRef = FirebaseDatabase.instance.ref().child('customerReferenceCounters');
+
+
+
+  Future<int> getNextReferenceNumber(String customerId, String customerSerial) async {
+    try {
+      // Get or create the counter for this customer
+      final counterRef = _referenceCounterRef.child(customerId);
+      final snapshot = await counterRef.get();
+
+      int lastNumber = 0;
+      if (snapshot.exists) {
+        final data = snapshot.value;
+        lastNumber = (data is int) ? data : (data as Map?)?['lastNumber'] ?? 0;
+      }
+
+      // Increment the counter
+      lastNumber++;
+
+      // Save the new counter value
+      await counterRef.set({
+        'lastNumber': lastNumber,
+        'customerSerial': customerSerial,
+        'lastUpdated': DateTime.now().toIso8601String(),
+      });
+
+      return lastNumber;
+    } catch (e) {
+      print('Error getting next reference number: $e');
+      return 1; // Fallback to 1
+    }
+  }
+
+  Future<String> getLastReferenceNumber(String customerId) async {
+    try {
+      final counterRef = _referenceCounterRef.child(customerId);
+      final snapshot = await counterRef.get();
+
+      if (snapshot.exists) {
+        final data = snapshot.value;
+        final lastNumber = (data is int) ? data : (data as Map?)?['lastNumber'] ?? 0;
+        final customerSerial = (data is Map) ? data['customerSerial']?.toString() : '';
+
+        if (lastNumber > 0 && customerSerial!.isNotEmpty) {
+          return '$customerSerial-${lastNumber.toString().padLeft(4, '0')}';
+        }
+      }
+
+      return ''; // No previous reference found
+    } catch (e) {
+      print('Error getting last reference number: $e');
+      return '';
+    }
+  }
 
   // Clear all loaded data and reset pagination
   void resetPagination() {
