@@ -813,7 +813,10 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 ),
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,
-                  widthFactor: value > 10000 ? 1.0 : value / 10000,
+                  // widthFactor: value > 10000 ? 1.0 : value / 10000,
+                  widthFactor: value > 10000
+                      ? 1.0
+                      : (value < 0 ? 0.0 : value / 10000), // Handle negative values
                   child: Container(
                     decoration: BoxDecoration(
                       color: color,
@@ -1107,7 +1110,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       FilledCustomerReportProvider reportProvider,
       bool isMobile,
       LanguageProvider languageProvider,
-      ) {
+      )
+  {
     final displayBalance = reportProvider.displayOpeningBalance;
 
     return Column(

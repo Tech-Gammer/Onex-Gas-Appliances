@@ -275,6 +275,8 @@ class FilledProvider with ChangeNotifier {
         debitAmount: 0.0, // No payment yet
         remainingBalance: grandTotal, // Full amount due initially
         filledNumber: filledNumber,
+        transactionDate: DateTime.parse(createdAt), // Add this line
+
       );
     } catch (e) {
       throw Exception('Failed to save filled: $e');
@@ -569,6 +571,7 @@ class FilledProvider with ChangeNotifier {
         required double remainingBalance,
         required String filledNumber,
         required String referenceNumber,
+        DateTime? transactionDate, // Add this parameter
         String? bankId,
         String? bankName,
         String? paymentMethod,
@@ -591,7 +594,8 @@ class FilledProvider with ChangeNotifier {
 
       // Calculate the new remaining balance
       final newRemainingBalance = lastRemainingBalance + creditAmount - debitAmount;
-
+// Use the provided date or current time as fallback
+      final dateToUse = transactionDate ?? DateTime.now();
       // Ledger data to be saved
       final ledgerData = {
         'referenceNumber':referenceNumber,
@@ -599,14 +603,8 @@ class FilledProvider with ChangeNotifier {
         'creditAmount': creditAmount,
         'debitAmount': debitAmount,
         'remainingBalance': newRemainingBalance, // Updated balance
-        'createdAt': DateTime.now().toIso8601String(),
+        'createdAt': dateToUse.toIso8601String(), // Use the actual transaction date
         'paymentMethod': paymentMethod, // Add payment method
-        // Include bank info if this is a bank payment
-        // if (paymentMethod == 'Bank') ...{
-        //   'bankId': bankId,
-        //   'bankName': bankName,
-        // },
-        // Include bank info for both bank and cheque payments
         if (bankId != null) 'bankId': bankId,
         if (bankName != null) 'bankName': bankName,
       };
@@ -932,6 +930,7 @@ class FilledProvider with ChangeNotifier {
         remainingBalance: grandTotal - updatedDebit,
         filledNumber: filled['filledNumber'],
         referenceNumber: filled['referenceNumber'],
+        transactionDate: paymentDate, // Use the actual payment date
         paymentMethod: paymentMethod,
         bankId: paymentMethod == 'Bank' ? bankId : (paymentMethod == 'Cheque' ? chequeBankId : null),
         bankName: paymentMethod == 'Bank' ? bankName : (paymentMethod == 'Cheque' ? chequeBankName : null),
@@ -1431,14 +1430,17 @@ class FilledProvider with ChangeNotifier {
         double remainingBalance = 0.0,
         required String filledNumber,
         required String referenceNumber,
+        DateTime? transactionDate, // Add this parameter
         String? paymentMethod,
         String? bankId,
         String? bankName,
         String? chequeNumber,
         String? description})
   async {
-
     final ledgerRef = _db.child('filledledger').child(customerId);
+
+    // Use the provided date or current time as fallback
+    final dateToUse = transactionDate ?? DateTime.now();
 
     await ledgerRef.push().set({
       'creditAmount': creditAmount,
@@ -1451,7 +1453,7 @@ class FilledProvider with ChangeNotifier {
       'bankName': bankName,
       'chequeNumber': chequeNumber,
       'description': description,
-      'createdAt': DateTime.now().toIso8601String(),
+      'createdAt': dateToUse.toIso8601String(), // Use the actual transaction date
     });
   }
 

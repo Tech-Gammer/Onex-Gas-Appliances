@@ -518,20 +518,6 @@ class _CustomerListState extends State<CustomerList> {
                       final filledNumber = DateTime.now().millisecondsSinceEpoch.toString();
 
                       // Update customer ledger directly
-                      // await filledProvider.updateCustomerLedger(
-                      //   customer.id,
-                      //   creditAmount: 0.0,
-                      //   debitAmount: amount,
-                      //   remainingBalance: (_customerBalances[customer.id] ?? 0.0) - amount,
-                      //   filledNumber: filledNumber,
-                      //   referenceNumber: 'Direct Payment',
-                      //   paymentMethod: _selectedPaymentMethod,
-                      //   bankId: _selectedPaymentMethod == 'Bank' ? _selectedBankId :
-                      //   (_selectedPaymentMethod == 'Cheque' ? _selectedBankId : null),
-                      //   bankName: _selectedPaymentMethod == 'Bank' ? _selectedBankName :
-                      //   (_selectedPaymentMethod == 'Cheque' ? _selectedBankName : null),
-                      // );
-                      // Update customer ledger directly
                       await filledProvider.updateCustomerLedger(
                         customer.id,
                         creditAmount: 0.0,
@@ -539,6 +525,7 @@ class _CustomerListState extends State<CustomerList> {
                         remainingBalance: (_customerBalances[customer.id] ?? 0.0) - amount,
                         filledNumber: filledNumber,
                         referenceNumber: 'Direct Payment',
+                        transactionDate: _selectedPaymentDate, // Add this line - use the selected payment date
                         paymentMethod: _selectedPaymentMethod,
                         bankId: _selectedPaymentMethod == 'Bank' ? _selectedBankId :
                         (_selectedPaymentMethod == 'Cheque' ? _selectedBankId : null),
@@ -547,7 +534,6 @@ class _CustomerListState extends State<CustomerList> {
                         chequeNumber: _selectedPaymentMethod == 'Cheque' ? _chequeNumberController.text : null,
                         description: _paymentDescription ?? 'Payment from ${customer.name}',
                       );
-
                       // Handle specific payment methods
                       if (_selectedPaymentMethod == 'Cash') {
                         await filledProvider.addCashBookEntry(
@@ -574,7 +560,7 @@ class _CustomerListState extends State<CustomerList> {
                           'chequeNumber': _chequeNumberController.text,
                           'chequeDate': _selectedChequeDate!.toIso8601String(),
                           'status': 'pending',
-                          'createdAt': DateTime.now().toIso8601String(),
+                          'createdAt': _selectedPaymentDate.toIso8601String(), // Use selected payment date instead of DateTime.now()
                           'bankName': _selectedBankName,
                         });
                       } else if (_selectedPaymentMethod == 'Bank' && _selectedBankId != null) {
@@ -585,6 +571,7 @@ class _CustomerListState extends State<CustomerList> {
                           'timestamp': _selectedPaymentDate.millisecondsSinceEpoch,
                           'customerId': customer.id,
                           'bankName': _selectedBankName,
+                          'createdAt': _selectedPaymentDate.toIso8601String(), // Add this field for consistency
                         });
 
                         // Update bank balance
