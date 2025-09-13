@@ -345,12 +345,6 @@ class _filledpageState extends State<filledpage> {
       itemnameImages.add(image);
     }
 
-    // // Generate customer details as an image
-    // final customerDetailsImage = await _createTextImage(
-    //   'Customer Name: ${selectedCustomer.name}\n'
-    //       'Customer Address: ${selectedCustomer.address}',
-    // );
-
     // Add a page with A5 size
     pdf.addPage(
       pw.Page(
@@ -371,37 +365,14 @@ class _filledpageState extends State<filledpage> {
                           'Onex Gas Appliances',
                           style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
                         ),
-                        // pw.Text(
-                        //   'Peoples Colony, Underpass, Gujranwala,PK',
-                        //   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        // ),
-                        // pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
-                        // pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
                       ]
                   ),
-                  // pw.Column(
-                  //     children: [
-                  //       pw.Text(
-                  //         'Invoice',
-                  //         style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                  //       ),
-                  //       pw.Text(
-                  //         'M. Zeeshan',
-                  //         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  //       ),
-                  //       pw.Text(
-                  //         '0300-6400717',
-                  //         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  //       ),
-                  //     ]
-                  // )//s
                 ],
               ),
               pw.Divider(),
 
               // Customer Information
               pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 11)),
-              // pw.Text('Customer Serial: ${selectedCustomer.customerSerial}', style: const pw.TextStyle(fontSize: 11)),
               pw.Text('Customer Address: ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 11)),
               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 11)),
 
@@ -2147,7 +2118,7 @@ class _filledpageState extends State<filledpage> {
 
   Widget _buildDesktopLayout(BuildContext context, LanguageProvider languageProvider) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 10.0),
       child: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 1400),
@@ -2155,7 +2126,7 @@ class _filledpageState extends State<filledpage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeaderSection(context, languageProvider, isMobile: false),
-              const SizedBox(height: 32),
+              const SizedBox(height: 10),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2164,7 +2135,7 @@ class _filledpageState extends State<filledpage> {
                     child: Column(
                       children: [
                         _buildCustomerSection(context, languageProvider),
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 10),
                         _buildItemsSection(context, languageProvider, isMobile: false),
                       ],
                     ),
@@ -2174,7 +2145,7 @@ class _filledpageState extends State<filledpage> {
                     child: Column(
                       children: [
                         _buildPaymentSection(context, languageProvider),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 10),
                         _buildTotalsSection(context, languageProvider),
                       ],
                     ),
@@ -2185,7 +2156,7 @@ class _filledpageState extends State<filledpage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 10),
               _buildSaveButton(context, languageProvider),
             ],
           ),
@@ -2522,7 +2493,11 @@ class _filledpageState extends State<filledpage> {
     );
   }
 
+
   Widget _buildItemsSection(BuildContext context, LanguageProvider languageProvider, {required bool isMobile}) {
+    // Calculate total quantity
+    double totalQuantity = _filledRows.fold(0.0, (sum, row) => sum + (row['qty'] ?? 0.0));
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2762,6 +2737,46 @@ class _filledpageState extends State<filledpage> {
               ),
             ),
 
+            // Total quantity row
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 5, // Span across Item and Description columns
+                    child: Text(
+                      languageProvider.isEnglish ? 'Total Quantity:' : 'کل مقدار:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      totalQuantity.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2, // Span across Rate, Total, and Delete columns
+                    child: Container(), // Empty space
+                  ),
+                ],
+              ),
+            ),
+
             // Add more items button
             Align(
               alignment: Alignment.centerRight,
@@ -2835,109 +2850,109 @@ class _filledpageState extends State<filledpage> {
               },
             ),
             const SizedBox(height: 16),
-            _buildTextField(
-              controller: _mazdooriController,
-              label: languageProvider.isEnglish ? 'Labour Charges' : 'مزدوری کی فیس',
-              icon: Icons.construction,
-              keyboardType: TextInputType.number,
-              onChanged: (value) {
-                setState(() {
-                  _mazdoori = double.tryParse(value) ?? 0.0;
-                  _calculateInitialTotals(); // Add this
-
-                });
-              },
-            ),
+            // _buildTextField(
+            //   controller: _mazdooriController,
+            //   label: languageProvider.isEnglish ? 'Labour Charges' : 'مزدوری کی فیس',
+            //   icon: Icons.construction,
+            //   keyboardType: TextInputType.number,
+            //   onChanged: (value) {
+            //     setState(() {
+            //       _mazdoori = double.tryParse(value) ?? 0.0;
+            //       _calculateInitialTotals(); // Add this
+            //
+            //     });
+            //   },
+            // ),
             const SizedBox(height: 16),
-            Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    languageProvider.isEnglish ? 'Payment Type:' : 'ادائیگی کی قسم:',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          children: [
-                            RadioListTile<String>(
-                              value: 'instant',
-                              groupValue: _paymentType,
-                              title: Text(languageProvider.isEnglish ? 'Instant Payment' : 'فوری ادائیگی'),
-                              onChanged: (value) {
-                                setState(() {
-                                  _paymentType = value!;
-                                  _instantPaymentMethod = null;
-                                });
-                              },
-                            ),
-                            RadioListTile<String>(
-                              value: 'udhaar',
-                              groupValue: _paymentType,
-                              title: Text(languageProvider.isEnglish ? 'Udhaar Payment' : 'ادھار ادائیگی'),
-                              onChanged: (value) {
-                                setState(() {
-                                  _paymentType = value!;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_paymentType == 'instant')
-                        Expanded(
-                          child: Column(
-                            children: [
-                              RadioListTile<String>(
-                                value: 'cash',
-                                groupValue: _instantPaymentMethod,
-                                title: Text(languageProvider.isEnglish ? 'Cash Payment' : 'نقد ادائیگی'),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _instantPaymentMethod = value!;
-                                  });
-                                },
-                              ),
-                              RadioListTile<String>(
-                                value: 'online',
-                                groupValue: _instantPaymentMethod,
-                                title: Text(languageProvider.isEnglish ? 'Online Transfer' : 'آن لائن ٹرانسفر'),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _instantPaymentMethod = value!;
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (_paymentType.isEmpty)
-                    Text(
-                      languageProvider.isEnglish
-                          ? 'Please select a payment type'
-                          : 'براہ کرم ادائیگی کی قسم منتخب کریں',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  if (_paymentType == 'instant' && (_instantPaymentMethod == null || _instantPaymentMethod!.isEmpty))
-                    Text(
-                      languageProvider.isEnglish
-                          ? 'Please select an instant payment method'
-                          : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                ],
-              ),
-            ),
+            // Form(
+            //   key: _formKey,
+            //   child: Column(
+            //     crossAxisAlignment: CrossAxisAlignment.start,
+            //     children: [
+            //       Text(
+            //         languageProvider.isEnglish ? 'Payment Type:' : 'ادائیگی کی قسم:',
+            //         style: TextStyle(
+            //           fontSize: 16,
+            //           fontWeight: FontWeight.w500,
+            //           color: Colors.grey[800],
+            //         ),
+            //       ),
+            //       const SizedBox(height: 8),
+            //       Row(
+            //         children: [
+            //           Expanded(
+            //             child: Column(
+            //               children: [
+            //                 RadioListTile<String>(
+            //                   value: 'instant',
+            //                   groupValue: _paymentType,
+            //                   title: Text(languageProvider.isEnglish ? 'Instant Payment' : 'فوری ادائیگی'),
+            //                   onChanged: (value) {
+            //                     setState(() {
+            //                       _paymentType = value!;
+            //                       _instantPaymentMethod = null;
+            //                     });
+            //                   },
+            //                 ),
+            //                 RadioListTile<String>(
+            //                   value: 'udhaar',
+            //                   groupValue: _paymentType,
+            //                   title: Text(languageProvider.isEnglish ? 'Udhaar Payment' : 'ادھار ادائیگی'),
+            //                   onChanged: (value) {
+            //                     setState(() {
+            //                       _paymentType = value!;
+            //                     });
+            //                   },
+            //                 ),
+            //               ],
+            //             ),
+            //           ),
+            //           if (_paymentType == 'instant')
+            //             Expanded(
+            //               child: Column(
+            //                 children: [
+            //                   RadioListTile<String>(
+            //                     value: 'cash',
+            //                     groupValue: _instantPaymentMethod,
+            //                     title: Text(languageProvider.isEnglish ? 'Cash Payment' : 'نقد ادائیگی'),
+            //                     onChanged: (value) {
+            //                       setState(() {
+            //                         _instantPaymentMethod = value!;
+            //                       });
+            //                     },
+            //                   ),
+            //                   RadioListTile<String>(
+            //                     value: 'online',
+            //                     groupValue: _instantPaymentMethod,
+            //                     title: Text(languageProvider.isEnglish ? 'Online Transfer' : 'آن لائن ٹرانسفر'),
+            //                     onChanged: (value) {
+            //                       setState(() {
+            //                         _instantPaymentMethod = value!;
+            //                       });
+            //                     },
+            //                   ),
+            //                 ],
+            //               ),
+            //             ),
+            //         ],
+            //       ),
+            //       if (_paymentType.isEmpty)
+            //         Text(
+            //           languageProvider.isEnglish
+            //               ? 'Please select a payment type'
+            //               : 'براہ کرم ادائیگی کی قسم منتخب کریں',
+            //           style: const TextStyle(color: Colors.red),
+            //         ),
+            //       if (_paymentType == 'instant' && (_instantPaymentMethod == null || _instantPaymentMethod!.isEmpty))
+            //         Text(
+            //           languageProvider.isEnglish
+            //               ? 'Please select an instant payment method'
+            //               : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
+            //           style: const TextStyle(color: Colors.red),
+            //         ),
+            //     ],
+            //   ),
+            // ),
           ],
         ),
       ),
@@ -2999,7 +3014,7 @@ class _filledpageState extends State<filledpage> {
               '+ ${_mazdoori.toStringAsFixed(2)}',
               color: Colors.green[600],
             ),
-            const Divider(thickness: 2, height: 24),
+            const Divider(thickness: 2, height: 10),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
               decoration: BoxDecoration(

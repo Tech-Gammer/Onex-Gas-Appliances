@@ -850,6 +850,13 @@ class _CustomerListState extends State<CustomerList> {
                               child: DataTable(
                                 columns: [
                                   const DataColumn(label: Text('#')),
+                                  // Inside the DataTable columns list, add this column:
+                                  DataColumn(
+                                    label: Text(
+                                      languageProvider.isEnglish ? 'Serial' : 'سیریل',
+                                      style: const TextStyle(fontSize: 20),
+                                    ),
+                                  ),
                                   DataColumn(
                                       label: Text(
                                         languageProvider.isEnglish ? 'Name' : 'نام',
@@ -909,6 +916,8 @@ class _CustomerListState extends State<CustomerList> {
                                       key: ValueKey(customer.id), // Add key for scrolling
                                       cells: [
                                         DataCell(Text('$index')),
+                                        // Inside the DataRow cells list, add this cell:
+                                        DataCell(Text(customer.customerSerial.isNotEmpty ? customer.customerSerial : '-')),
                                         DataCell(Text(customer.name)),
                                         DataCell(Text(customer.address)),
                                         DataCell(Text(customer.city)),
@@ -1006,6 +1015,10 @@ class _CustomerListState extends State<CustomerList> {
                                   subtitle: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
+                                      Text(
+                                        'Serial: ${customer.customerSerial.isNotEmpty ? customer.customerSerial : 'N/A'}',
+                                        style: TextStyle(color: Colors.orange[300]),
+                                      ),
                                       Text(customer.address, style: TextStyle(color: Colors.orange[300])),
                                       Text(customer.city, style: TextStyle(color: Colors.orange[300])),
                                       const SizedBox(height: 4),

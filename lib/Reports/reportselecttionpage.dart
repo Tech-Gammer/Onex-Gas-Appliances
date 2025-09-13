@@ -90,14 +90,14 @@ class ReportsPage extends StatelessWidget {
                       reportType: 'Sarya Reports',
                       isWeb: isWeb,
                     ),
-                    _buildReportCard(
-                      context: context,
-                      title: languageProvider.isEnglish ? 'Payment Reports' : 'پیمنٹ رپورٹس',
-                      icon: Icons.assignment_turned_in,
-                      color: Color(0xFFFF8A65), // Orange color
-                      reportType: 'Filled Reports',
-                      isWeb: isWeb,
-                    ),
+                    // _buildReportCard(
+                    //   context: context,
+                    //   title: languageProvider.isEnglish ? 'Payment Reports' : 'پیمنٹ رپورٹس',
+                    //   icon: Icons.assignment_turned_in,
+                    //   color: Color(0xFFFF8A65), // Orange color
+                    //   reportType: 'Filled Reports',
+                    //   isWeb: isWeb,
+                    // ),
                   ],
                 ),
               ),
