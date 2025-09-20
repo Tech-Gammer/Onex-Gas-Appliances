@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:onex_gas_appliances/rough.dart';
 import 'package:provider/provider.dart';
 import 'Auth/login.dart';
 import 'Auth/register.dart';
@@ -54,7 +55,7 @@ class MyApp extends StatelessWidget {
       builder: (context, languageProvider, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          home:  Dashboard(),
+          home:  DomainExpiredPage(),
           theme: ThemeData(
             fontFamily: languageProvider.isEnglish ? 'Roboto' : 'JameelNoori',
           ),
