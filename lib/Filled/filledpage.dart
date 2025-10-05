@@ -2493,7 +2493,6 @@ class _filledpageState extends State<filledpage> {
     );
   }
 
-
   Widget _buildItemsSection(BuildContext context, LanguageProvider languageProvider, {required bool isMobile}) {
     // Calculate total quantity
     double totalQuantity = _filledRows.fold(0.0, (sum, row) => sum + (row['qty'] ?? 0.0));
