@@ -22,6 +22,123 @@ class EmployeeProvider with ChangeNotifier {
   }
 
 
+
+
+
+  Future<int> calculatePresentDays(String employeeId, DateTimeRange dateRange) async {
+    try {
+      final attendanceData = await getAttendanceForDateRange(employeeId, dateRange);
+      int presentDays = 0;
+
+      attendanceData.forEach((dateString, attendance) {
+        if (attendance['status'] == 'present') {
+          presentDays++;
+        }
+      });
+
+      print('Present days for $employeeId: $presentDays');
+      return presentDays;
+    } catch (e) {
+      print('Error calculating present days for $employeeId: $e');
+      return 0;
+    }
+  }
+
+  int calculateTotalWorkingDays(DateTimeRange dateRange) {
+    int workingDays = 0;
+    DateTime current = dateRange.start;
+
+    while (current.isBefore(dateRange.end.add(Duration(days: 1)))) {
+      // Skip weekends (Saturday = 6, Sunday = 7)
+      if (current.weekday != DateTime.saturday && current.weekday != DateTime.sunday) {
+        workingDays++;
+      }
+      current = current.add(Duration(days: 1));
+    }
+
+    print('Total working days in range: $workingDays');
+    return workingDays;
+  }
+
+  Future<double> calculateSalaryBasedOnAttendance(
+      String employeeId,
+      DateTimeRange dateRange
+      ) async {
+    try {
+      // Get employee's monthly salary
+      final monthlySalary = calculateMonthlySalary(employeeId, dateRange.start.year, dateRange.start.month);
+
+      // Calculate present days
+      final presentDays = await calculatePresentDays(employeeId, dateRange);
+
+      // Calculate total working days in the range
+      final totalWorkingDays = calculateTotalWorkingDays(dateRange);
+
+      if (totalWorkingDays == 0) return 0.0;
+
+      // Calculate per day salary
+      final perDaySalary = monthlySalary / totalWorkingDays;
+
+      // Calculate salary based on present days
+      final attendanceBasedSalary = perDaySalary * presentDays;
+
+      print('=== Salary Calculation for ${_employees[employeeId]?['name']} ===');
+      print('Monthly Salary: $monthlySalary');
+      print('Present Days: $presentDays');
+      print('Total Working Days: $totalWorkingDays');
+      print('Per Day Salary: $perDaySalary');
+      print('Final Salary: $attendanceBasedSalary');
+      print('================================');
+
+      return attendanceBasedSalary;
+    } catch (e) {
+      print('Error calculating attendance-based salary for $employeeId: $e');
+      return 0.0;
+    }
+  }
+
+  Future<Map<String, dynamic>> getSalarySummaryWithAttendance(
+      String employeeId,
+      DateTimeRange dateRange
+      )
+  async {
+    try {
+      final attendanceBasedSalary = await calculateSalaryBasedOnAttendance(employeeId, dateRange);
+      final totalExpenses = await calculateExpensesInDateRangeAsync(employeeId, dateRange);
+      final netSalary = attendanceBasedSalary - totalExpenses;
+      final expenses = getExpensesInDateRange(employeeId, dateRange);
+      final presentDays = await calculatePresentDays(employeeId, dateRange);
+      final totalWorkingDays = calculateTotalWorkingDays(dateRange);
+
+      print('Salary Summary with Attendance for $employeeId:');
+      print('Attendance Based Salary: $attendanceBasedSalary');
+      print('Total Expenses: $totalExpenses');
+      print('Net Salary: $netSalary');
+      print('Present Days: $presentDays/$totalWorkingDays');
+
+      return {
+        'basicSalary': attendanceBasedSalary,
+        'totalExpenses': totalExpenses,
+        'netSalary': netSalary,
+        'expensesCount': expenses.length,
+        'presentDays': presentDays,
+        'totalWorkingDays': totalWorkingDays,
+        'attendancePercentage': totalWorkingDays > 0 ? (presentDays / totalWorkingDays) * 100 : 0,
+      };
+    } catch (e) {
+      print('Error in getSalarySummaryWithAttendance for $employeeId: $e');
+      return {
+        'basicSalary': 0.0,
+        'totalExpenses': 0.0,
+        'netSalary': 0.0,
+        'expensesCount': 0,
+        'presentDays': 0,
+        'totalWorkingDays': 0,
+        'attendancePercentage': 0,
+      };
+    }
+  }
+
   Map<String, dynamic> getExpensesInDateRange(String employeeId, DateTimeRange dateRange) {
     final employeeExpenses = _expenses[employeeId];
     if (employeeExpenses == null || employeeExpenses.isEmpty) {
@@ -59,7 +176,6 @@ class EmployeeProvider with ChangeNotifier {
     return filteredExpenses;
   }
 
-// Add this method to calculate expenses total properly:
   double calculateExpensesInDateRange(String employeeId, DateTimeRange dateRange) {
     final expenses = getExpensesInDateRange(employeeId, dateRange);
     double total = 0.0;
@@ -82,20 +198,41 @@ class EmployeeProvider with ChangeNotifier {
     return total;
   }
 
-// Fixed: Calculate monthly salary - fetch from Firebase if not in memory
   double calculateMonthlySalary(String employeeId, int year, int month) {
-    final salaryData = _salaries[employeeId];
-    if (salaryData == null) {
-      print('No salary data found in memory for employee: $employeeId');
+    try {
+      print('=== CALCULATING MONTHLY SALARY ===');
+      print('Employee ID: $employeeId');
+      print('Salaries map keys: ${_salaries.keys}');
+      print('Salaries map: $_salaries');
+
+      final salaryData = _salaries[employeeId];
+      if (salaryData == null) {
+        print('❌ No salary data found for employee: $employeeId');
+        print('Available employee IDs in salaries: ${_salaries.keys}');
+        return 0.0;
+      }
+
+      print('Salary data found: $salaryData');
+
+      // Handle different possible data structures
+      double basicSalary = 0.0;
+
+      if (salaryData is Map) {
+        basicSalary = (salaryData['basicSalary'] as num?)?.toDouble() ?? 0.0;
+      } else if (salaryData is num) {
+        basicSalary = salaryData.toDouble();
+      } else if (salaryData is String) {
+        basicSalary = double.tryParse(salaryData) ?? 0.0;
+      }
+
+      print('✅ Extracted basic salary: $basicSalary');
+      return basicSalary;
+    } catch (e) {
+      print('❌ Error in calculateMonthlySalary: $e');
       return 0.0;
     }
-
-    final basicSalary = (salaryData['basicSalary'] as num?)?.toDouble() ?? 0.0;
-    print('Salary for $employeeId: $basicSalary');
-    return basicSalary;
   }
 
-// Fixed: Get salary summary for a date range with better error handling
   Map<String, dynamic> getSalarySummary(String employeeId, DateTimeRange dateRange) {
     try {
       final monthlySalary = calculateMonthlySalary(
@@ -127,7 +264,6 @@ class EmployeeProvider with ChangeNotifier {
     }
   }
 
-// Calculate net salary after deducting expenses
   double calculateNetSalary(String employeeId, DateTimeRange dateRange) {
     final monthlySalary = calculateMonthlySalary(employeeId, DateTime.now().year, DateTime.now().month);
     final totalExpenses = calculateExpensesInDateRange(employeeId, dateRange);
@@ -216,7 +352,6 @@ class EmployeeProvider with ChangeNotifier {
     await _salaryRef.child(id).remove();
   }
 
-// In your EmployeeProvider class
   Future<void> addExpense(String employeeId, Map<String, dynamic> expenseData) async {
     try {
       final DatabaseReference expenseRef = FirebaseDatabase.instance
@@ -249,7 +384,6 @@ class EmployeeProvider with ChangeNotifier {
     return {};
   }
 
-  // Salary Methods
   Future<void> setSalary(String employeeId, Map<String, dynamic> salaryData) async {
     await _salaryRef.child(employeeId).set(salaryData);
   }
@@ -262,7 +396,6 @@ class EmployeeProvider with ChangeNotifier {
     return null;
   }
 
-  // Calculate total expenses for an employee in a specific month
   double calculateMonthlyExpenses(String employeeId, int year, int month) {
     final employeeExpenses = _expenses[employeeId];
     if (employeeExpenses == null) return 0.0;

@@ -15,6 +15,7 @@ import 'DailyExpensesPages/viewexpensepage.dart';
 import 'Employee/employeelist.dart';
 import 'Filled/filledlist.dart';
 import 'Filled/quotationlistpage.dart';
+import 'NewEmployee/employeemainpage.dart';
 import 'Purchase/Purchase Order page.dart';
 import 'Purchase/purchaseorderlist.dart';
 import 'Reminders/reminderslistpage.dart';
@@ -205,7 +206,7 @@ class _DashboardState extends State<Dashboard> {
       {'icon': Icons.receipt_long, 'titleEn': 'Quotation', 'titleUr': 'بل اندراج', 'color': Colors.deepPurple, 'page': QuotationListPage()},
       {'icon': Icons.inventory, 'titleEn': 'Invoice', 'titleUr': 'انوائس اندراج', 'color': Colors.orange, 'page': filledListpage()},
       {'icon': Icons.attach_money, 'titleEn': 'Expenses', 'titleUr': 'اخراجات', 'color': Colors.redAccent, 'page': ViewExpensesPage()},
-      {'icon': Icons.engineering, 'titleEn': 'Employee', 'titleUr': 'ورکر', 'color': Colors.teal, 'page': EmployeeListPage()},
+      {'icon': Icons.engineering, 'titleEn': 'Employee', 'titleUr': 'ورکر', 'color': Colors.teal, 'page': HomeScreen()},
       {'icon': Icons.group, 'titleEn': 'Customers', 'titleUr': 'کسٹمرز', 'color': Colors.blueAccent, 'page': CustomerList()},
       {'icon': Icons.account_balance_wallet, 'titleEn': 'View Ledger', 'titleUr': 'کھاتہ دیکھیں', 'color': Colors.green, 'page': const LedgerSelection()},
       {'icon': Icons.analytics, 'titleEn': 'Reports', 'titleUr': 'رپورٹس', 'color': Colors.indigo, 'page': const ReportsPage()},

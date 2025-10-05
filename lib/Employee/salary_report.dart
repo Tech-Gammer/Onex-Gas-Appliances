@@ -33,6 +33,7 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
     });
   }
 
+  // Replace the _calculateSalaryReports method in SalaryReportPage
   Future<void> _calculateSalaryReports() async {
     if (!mounted) return;
 
@@ -41,7 +42,6 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
     });
 
     final provider = Provider.of<EmployeeProvider>(context, listen: false);
-
     Map<String, Map<String, dynamic>> reports = {};
 
     for (var employeeEntry in provider.employees.entries) {
@@ -49,44 +49,21 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
       final employee = employeeEntry.value;
 
       try {
-        // Get salary data
-        final salaryData = await provider.getEmployeeSalary(employeeId);
-        final basicSalary = (salaryData?['basicSalary'] as num?)?.toDouble() ?? 0.0;
-
-        // Use async method to get expenses
-        final totalExpenses = await provider.calculateExpensesInDateRangeAsync(employeeId, _selectedDateRange);
-        final netSalary = basicSalary - totalExpenses;
-
-        // Count expensess
-        final snapshot = await FirebaseDatabase.instance.ref().child('expenses').child(employeeId).get();
-        int expensesCount = 0;
-        if (snapshot.exists && snapshot.value != null) {
-          final expensesData = snapshot.value as Map;
-          expensesData.forEach((key, value) {
-            if (value is Map) {
-              final dateString = value['date'];
-              if (dateString != null) {
-                try {
-                  final expenseDate = DateTime.parse(dateString);
-                  if ((expenseDate.isAtSameMomentAs(_selectedDateRange.start) || expenseDate.isAfter(_selectedDateRange.start)) &&
-                      (expenseDate.isAtSameMomentAs(_selectedDateRange.end) || expenseDate.isBefore(_selectedDateRange.end.add(Duration(days: 1))))) {
-                    expensesCount++;
-                  }
-                } catch (e) {}
-              }
-            }
-          });
-        }
+        final salarySummary = await provider.getSalarySummaryWithAttendance(
+            employeeId,
+            _selectedDateRange
+        );
 
         reports[employeeId] = {
-          'basicSalary': basicSalary,
-          'totalExpenses': totalExpenses,
-          'netSalary': netSalary,
-          'expensesCount': expensesCount,
+          'basicSalary': salarySummary['basicSalary'] ?? 0.0,
+          'totalExpenses': salarySummary['totalExpenses'] ?? 0.0,
+          'netSalary': salarySummary['netSalary'] ?? 0.0,
+          'expensesCount': salarySummary['expensesCount'] ?? 0,
+          'presentDays': salarySummary['presentDays'] ?? 0,
+          'totalWorkingDays': salarySummary['totalWorkingDays'] ?? 0,
+          'attendancePercentage': salarySummary['attendancePercentage'] ?? 0,
           'employeeName': employee['name'] ?? 'Unknown',
         };
-
-        print('Report for ${employee['name']}: Salary=$basicSalary, Expenses=$totalExpenses, Net=$netSalary');
 
       } catch (e) {
         print('Error calculating salary for $employeeId: $e');
@@ -95,6 +72,9 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
           'totalExpenses': 0.0,
           'netSalary': 0.0,
           'expensesCount': 0,
+          'presentDays': 0,
+          'totalWorkingDays': 0,
+          'attendancePercentage': 0,
           'employeeName': employee['name'] ?? 'Unknown',
         };
       }
@@ -105,6 +85,9 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
         _salaryReports = reports;
         _isLoading = false;
       });
+
+      // Debug output
+      _debugSalaryCalculation();
     }
   }
 
@@ -256,8 +239,12 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
               ],
             ),
           ),
+          // Attendance Summary
+          _buildAttendanceSummary(isEnglish),
 
+          SizedBox(height: 16),
           // Summary Card
+          // Replace your current summary section with this:
           Container(
             margin: EdgeInsets.symmetric(horizontal: 16),
             padding: EdgeInsets.all(16),
@@ -269,23 +256,44 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
               ),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            child: Column(
               children: [
-                _buildSummaryItem(
-                  isEnglish ? 'Total Salary' : 'کل تنخواہ',
-                  _calculateTotalSalary(),
-                  Colors.white,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildSummaryItem(
+                      isEnglish ? 'Total Salary' : 'کل تنخواہ',
+                      _calculateTotalSalary(),
+                      Colors.white,
+                    ),
+                    _buildSummaryItem(
+                      isEnglish ? 'Total Expenses' : 'کل اخراجات',
+                      _calculateTotalExpenses(),
+                      Colors.white,
+                    ),
+                    _buildSummaryItem(
+                      isEnglish ? 'Net Payable' : 'قابل ادائیگی',
+                      _calculateNetPayable(),
+                      Colors.white,
+                    ),
+                  ],
                 ),
-                _buildSummaryItem(
-                  isEnglish ? 'Total Expenses' : 'کل اخراجات',
-                  _calculateTotalExpenses(),
-                  Colors.white,
-                ),
-                _buildSummaryItem(
-                  isEnglish ? 'Net Payable' : 'قابل ادائیگی',
-                  _calculateNetPayable(),
-                  Colors.white,
+                SizedBox(height: 12),
+                // Add a small indicator showing this is attendance-based
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isEnglish ? 'Based on Attendance' : 'حاضری پر مبنی',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -359,11 +367,17 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
     );
   }
 
-  Widget _buildSummaryItem(String title, double amount, Color color) {
+  Widget _buildSummaryItem(String title, double amount, Color color,
+      {bool showCurrency = true, bool isPercentage = false})
+  {
     return Column(
       children: [
         Text(
-          'Rs. ${amount.toStringAsFixed(2)}',
+          isPercentage
+              ? '${amount.toStringAsFixed(1)}%'
+              : showCurrency
+              ? 'Rs. ${amount.toStringAsFixed(2)}'
+              : amount.toInt().toString(),
           style: TextStyle(
             color: color,
             fontSize: 16,
@@ -382,13 +396,105 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
     );
   }
 
+  // Add this method to show attendance summary
+  Widget _buildAttendanceSummary(bool isEnglish) {
+    int totalPresentDays = 0;
+    int totalWorkingDays = 0;
+
+    _salaryReports.forEach((employeeId, report) {
+      final presentDays = (report['presentDays'] ?? 0);
+      final workingDays = (report['totalWorkingDays'] ?? 0);
+
+      totalPresentDays += (presentDays is num) ? presentDays.toInt() : 0;
+      totalWorkingDays += (workingDays is num) ? workingDays.toInt() : 0;
+    });
+
+    final double overallAttendance = totalWorkingDays > 0
+        ? (totalPresentDays / totalWorkingDays) * 100
+        : 0.0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildSummaryItem(
+            isEnglish ? 'Present Days' : 'حاضر دن',
+            totalPresentDays.toDouble(),
+            _getAttendanceColor(overallAttendance),
+            showCurrency: false,
+          ),
+          _buildSummaryItem(
+            isEnglish ? 'Working Days' : 'کام کے دن',
+            totalWorkingDays.toDouble(),
+            const Color(0xFF667EEA),
+            showCurrency: false,
+          ),
+          _buildSummaryItem(
+            isEnglish ? 'Attendance' : 'حاضری',
+            overallAttendance,
+            _getAttendanceColor(overallAttendance),
+            showCurrency: false,
+            isPercentage: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _debugSalaryCalculation() {
+    print('=== SALARY REPORT DEBUG INFO ===');
+    print('Date Range: ${_selectedDateRange.start} to ${_selectedDateRange.end}');
+    print('Total Employees: ${_salaryReports.length}');
+
+    _salaryReports.forEach((employeeId, report) {
+      print('\n--- ${report['employeeName']} ---');
+      print('Present Days: ${report['presentDays']}');
+      print('Total Working Days: ${report['totalWorkingDays']}');
+      print('Attendance %: ${report['attendancePercentage']}%');
+      print('Basic Salary: Rs. ${report['basicSalary']}');
+      print('Total Expenses: Rs. ${report['totalExpenses']}');
+      print('Net Salary: Rs. ${report['netSalary']}');
+    });
+
+    print('\n=== TOTALS ===');
+    print('Total Salary: Rs. ${_calculateTotalSalary()}');
+    print('Total Expenses: Rs. ${_calculateTotalExpenses()}');
+    print('Net Payable: Rs. ${_calculateNetPayable()}');
+    print('============================');
+  }
+
   double _calculateTotalSalary() {
     double total = 0;
     _salaryReports.forEach((employeeId, report) {
-      total += (report['basicSalary'] ?? 0).toDouble();
+      final basicSalary = (report['basicSalary'] ?? 0).toDouble();
+      total += basicSalary;
+
+      print('=== SALARY DEBUG for ${report['employeeName']} ===');
+      print('Employee ID: $employeeId');
+      print('Present Days: ${report['presentDays']}');
+      print('Total Working Days: ${report['totalWorkingDays']}');
+      print('Basic Salary from report: $basicSalary');
+      print('Monthly Salary from provider: ${Provider.of<EmployeeProvider>(context, listen: false).calculateMonthlySalary(employeeId, _selectedDateRange.start.year, _selectedDateRange.start.month)}');
     });
+
+    print('=== TOTAL SALARY: $total ===');
     return total;
   }
+
+
 
   double _calculateTotalExpenses() {
     double total = 0;
@@ -402,16 +508,21 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
     return _calculateTotalSalary() - _calculateTotalExpenses();
   }
 
+// Update the _buildEmployeeSalaryCard method
   Widget _buildEmployeeSalaryCard(
       String employeeId,
       Map<String, String> employee,
       Map<String, dynamic> report,
       bool isEnglish,
-      ) {
+      )
+  {
     final basicSalary = (report['basicSalary'] ?? 0).toDouble();
     final totalExpenses = (report['totalExpenses'] ?? 0).toDouble();
     final netSalary = (report['netSalary'] ?? 0).toDouble();
     final expensesCount = (report['expensesCount'] ?? 0).toInt();
+    final presentDays = (report['presentDays'] ?? 0).toInt();
+    final totalWorkingDays = (report['totalWorkingDays'] ?? 0).toInt();
+    final attendancePercentage = (report['attendancePercentage'] ?? 0).toDouble();
 
     return Card(
       margin: EdgeInsets.only(bottom: 12),
@@ -449,6 +560,36 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
                       Text(
                         'ID: $employeeId',
                         style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                      SizedBox(height: 4),
+                      // Attendance information
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _getAttendanceColor(attendancePercentage),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$presentDays/$totalWorkingDays ${isEnglish ? 'Days' : 'دن'}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            '${attendancePercentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _getAttendanceColor(attendancePercentage),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -494,19 +635,51 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
                   Color(0xFFFF8A65),
                   showAmount: false,
                 ),
+                _buildBreakdownItem(
+                  '${presentDays}/${totalWorkingDays}',
+                  presentDays.toDouble(),
+                  _getAttendanceColor(attendancePercentage),
+                  showAmount: false,
+                ),
               ],
             ),
-            if (expensesCount > 0) ...[
-              SizedBox(height: 8),
-              Text(
-                '${isEnglish ? 'View' : 'دیکھیں'} $expensesCount ${isEnglish ? 'expenses' : 'اخراجات'}',
-                style: TextStyle(color: Colors.blue, fontSize: 12),
+            SizedBox(height: 8),
+            // Attendance progress bar
+            Container(
+              height: 6,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(3),
               ),
-            ],
+              child: Stack(
+                children: [
+                  Container(
+                    width: (MediaQuery.of(context).size.width - 64) * (attendancePercentage / 100),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          _getAttendanceColor(attendancePercentage),
+                          _getAttendanceColor(attendancePercentage).withOpacity(0.7),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+// Helper method to get color based on attendance percentage
+  Color _getAttendanceColor(double percentage) {
+    if (percentage >= 90) return Color(0xFF10B981);
+    if (percentage >= 75) return Color(0xFF3B82F6);
+    if (percentage >= 60) return Color(0xFFFFB74D);
+    return Color(0xFFEF4444);
   }
 
   Widget _buildBreakdownItem(String title, double amount, Color color, {bool showAmount = true}) {
