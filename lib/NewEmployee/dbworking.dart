@@ -91,20 +91,27 @@ class DatabaseService {
     return [];
   }
 
-  // Salary Calculation
   Future<Map<String, dynamic>> calculateSalary(String employeeId, DateTime month) async {
     Employee employee = (await getEmployees()).firstWhere((emp) => emp.id == employeeId);
     List<Attendance> attendances = await getEmployeeAttendance(employeeId, month);
     List<Expense> expenses = await getEmployeeExpenses(employeeId, month);
 
+    // Count present days
     int presentDays = attendances.where((a) => a.isPresent).length;
+
+    // Fixed 30 days per month for calculation
+    int fixedWorkingDays = 30;
+
     double totalExpenses = expenses.fold(0, (sum, expense) => sum + expense.amount);
 
     double salary = 0;
+
     if (employee.salaryType == 'monthly') {
-      salary = employee.basicSalary;
+      // For monthly employees: (Basic Salary / 30) * Present Days
+      double dailyRate = employee.basicSalary / fixedWorkingDays;
+      salary = dailyRate * presentDays;
     } else {
-      // Daily wage calculation
+      // For daily employees: Basic Salary * Present Days
       salary = presentDays * employee.basicSalary;
     }
 
@@ -113,10 +120,36 @@ class DatabaseService {
     return {
       'employee': employee,
       'presentDays': presentDays,
+      'totalWorkingDays': fixedWorkingDays, // Now always 30
       'totalExpenses': totalExpenses,
       'grossSalary': salary,
       'netSalary': netSalary,
       'expenses': expenses,
+      'dailyRate': employee.salaryType == 'monthly' ? employee.basicSalary / fixedWorkingDays : employee.basicSalary,
     };
   }
+
+// Helper method to calculate working days in a month (excluding weekends)
+//   int _getWorkingDaysInMonth(DateTime month) {
+//     DateTime firstDay = DateTime(month.year, month.month, 1);
+//     DateTime lastDay = DateTime(month.year, month.month + 1, 0);
+//
+//     int workingDays = 0;
+//     DateTime currentDay = firstDay;
+//
+//     while (currentDay.isBefore(lastDay) || currentDay.isAtSameMomentAs(lastDay)) {
+//       // Check if it's a weekday (Monday to Friday)
+//       if (currentDay.weekday != DateTime.saturday && currentDay.weekday != DateTime.sunday) {
+//         workingDays++;
+//       }
+//       currentDay = currentDay.add(Duration(days: 1));
+//     }
+//
+//     return workingDays;
+//   }
+  int _getWorkingDaysInMonth(DateTime month) {
+    return 30; // Always return 30 days
+  }
+
+
 }

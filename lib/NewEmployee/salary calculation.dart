@@ -37,7 +37,7 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
       lastDate: DateTime.now(),
       initialDatePickerMode: DatePickerMode.year,
     );
-    if (picked != null && picked != _selectedMonth) {
+    if (picked != null) {
       setState(() {
         _selectedMonth = picked;
         _salaryResults.clear();
@@ -64,8 +64,157 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
     }
   }
 
+  Widget _buildSalaryCard(Employee employee, Map<String, dynamic>? result) {
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    employee.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Chip(
+                  label: Text(
+                    employee.salaryType.toUpperCase(),
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                  backgroundColor: employee.salaryType == 'monthly'
+                      ? Colors.blue
+                      : Colors.orange,
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text('Basic Salary: \$${employee.basicSalary} ${employee.salaryType == 'monthly' ? '/month' : '/day'}'),
+
+            if (result != null) ...[
+              SizedBox(height: 12),
+              Divider(),
+              Text(
+                'Salary Calculation for ${DateFormat('MMMM yyyy').format(_selectedMonth)}:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+
+              // Present Days Information
+              Row(
+                children: [
+                  Expanded(child: Text('Present Days:')),
+                  Text('${result['presentDays']}/${result['totalWorkingDays']}'),
+                ],
+              ),
+
+              // Daily Rate Information
+              if (employee.salaryType == 'monthly')
+                Row(
+                  children: [
+                    Expanded(child: Text('Daily Rate:')),
+                    Text('\$${(result['dailyRate'] as double).toStringAsFixed(2)}'),
+                  ],
+                ),
+
+              SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(child: Text('Gross Salary:')),
+                  Text(
+                    '\$${(result['grossSalary'] as double).toStringAsFixed(2)}',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+
+              Row(
+                children: [
+                  Expanded(child: Text('Expenses Deduction:')),
+                  Text(
+                    '-\$${(result['totalExpenses'] as double).toStringAsFixed(2)}',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
+              ),
+
+              Divider(),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Net Salary:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '\$${(result['netSalary'] as double).toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: result['netSalary'] >= 0 ? Colors.green : Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+
+              // Show expenses list if any
+              if ((result['expenses'] as List).isNotEmpty) ...[
+                SizedBox(height: 8),
+                Text(
+                  'Expenses Details:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                ...(result['expenses'] as List).map<Widget>((expense) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            expense.description,
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        Text(
+                          '-\$${expense.amount}',
+                          style: TextStyle(fontSize: 12, color: Colors.red),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
+            ] else ...[
+              SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () => _calculateSalary(employee.id!),
+                child: Text('Calculate Salary'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: Size(double.infinity, 40),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    int calculatedCount = _salaryResults.length;
+    int totalCount = _employees.length;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Calculate Salary'),
@@ -76,17 +225,46 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // Month Selection Card
             Card(
               child: ListTile(
+                leading: Icon(Icons.calendar_today),
                 title: Text('Selected Month'),
-                subtitle: Text(DateFormat('yyyy-MM').format(_selectedMonth)),
+                subtitle: Text(DateFormat('MMMM yyyy').format(_selectedMonth)),
                 trailing: IconButton(
-                  icon: Icon(Icons.calendar_today),
+                  icon: Icon(Icons.edit_calendar),
                   onPressed: _selectMonth,
                 ),
               ),
             ),
+
             SizedBox(height: 16),
+
+            // Calculation Progress
+            if (calculatedCount > 0)
+              Card(
+                color: Colors.blue[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Calculation Progress:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '$calculatedCount/$totalCount',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            SizedBox(height: 16),
+
+            // Calculate All Button
             ElevatedButton(
               onPressed: _calculateAllSalaries,
               child: Text('Calculate All Salaries'),
@@ -94,60 +272,17 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                 minimumSize: Size(double.infinity, 50),
               ),
             ),
+
             SizedBox(height: 16),
+
+            // Employees List
             Expanded(
               child: ListView.builder(
                 itemCount: _employees.length,
                 itemBuilder: (context, index) {
                   final employee = _employees[index];
                   final result = _salaryResults[employee.id!];
-
-                  return Card(
-                    margin: EdgeInsets.symmetric(vertical: 4),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            employee.name,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text('Salary Type: ${employee.salaryType}'),
-                          Text('Basic Salary: \$${employee.basicSalary}'),
-
-                          if (result != null) ...[
-                            SizedBox(height: 8),
-                            Divider(),
-                            Text(
-                              'Salary Calculation:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text('Present Days: ${result['presentDays']}'),
-                            Text('Total Expenses: \$${result['totalExpenses']}'),
-                            Text('Gross Salary: \$${result['grossSalary']}'),
-                            Text(
-                              'Net Salary: \$${result['netSalary']}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: result['netSalary'] >= 0 ? Colors.green : Colors.red,
-                              ),
-                            ),
-                          ] else ...[
-                            SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: () => _calculateSalary(employee.id!),
-                              child: Text('Calculate Salary'),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
+                  return _buildSalaryCard(employee, result);
                 },
               ),
             ),
