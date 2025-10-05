@@ -57,7 +57,7 @@ class _SalaryReportPageState extends State<SalaryReportPage> {
         final totalExpenses = await provider.calculateExpensesInDateRangeAsync(employeeId, _selectedDateRange);
         final netSalary = basicSalary - totalExpenses;
 
-        // Count expenses
+        // Count expensess
         final snapshot = await FirebaseDatabase.instance.ref().child('expenses').child(employeeId).get();
         int expensesCount = 0;
         if (snapshot.exists && snapshot.value != null) {
