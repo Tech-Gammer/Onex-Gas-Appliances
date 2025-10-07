@@ -177,8 +177,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         finalBalance -= debit;
       }
 
-      // finalBalance = totalCredit - totalDebit;
-      // Add customer information
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,

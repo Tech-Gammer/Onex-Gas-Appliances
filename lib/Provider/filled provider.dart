@@ -275,7 +275,8 @@ class FilledProvider with ChangeNotifier {
         debitAmount: 0.0, // No payment yet
         remainingBalance: grandTotal, // Full amount due initially
         filledNumber: filledNumber,
-        transactionDate: DateTime.parse(createdAt), // Add this line
+        // transactionDate: DateTime.parse(createdAt), // Add this line
+        transactionDate: DateTime.parse(createdAt), // Use the provided date
 
       );
     } catch (e) {
@@ -303,17 +304,16 @@ class FilledProvider with ChangeNotifier {
     required String customerName,
     required double subtotal,
     required double discount,
-    required double mazdoori, // Add this parameter
+    required double mazdoori,
     required double grandTotal,
     required String paymentType,
     String? paymentMethod,
-    required String referenceNumber, // Add this
-    required String biltiNumber, // Add this
-    required String transportCompany, // Add this
+    required String referenceNumber,
+    required String biltiNumber,
+    required String transportCompany,
     required List<Map<String, dynamic>> items,
     required String createdAt,
-  })
-  async {
+  }) async {
     try {
       // Fetch the old filled data
       final oldfilled = await getFilledById(filledId);
@@ -322,12 +322,12 @@ class FilledProvider with ChangeNotifier {
       }
       final isTimestamp = oldfilled['numberType'] == 'timestamp';
 
-      // Get the old grand total
+      // Get the old grand total and date
       final double oldGrandTotal = (oldfilled['grandTotal'] as num).toDouble();
+      final String oldCreatedAt = oldfilled['createdAt']?.toString() ?? '';
 
       // Calculate the difference between the old and new grand totals
       final double difference = grandTotal - oldGrandTotal;
-
 
       // Filter out empty rows
       final cleanedItems = items.where((item) =>
@@ -341,15 +341,16 @@ class FilledProvider with ChangeNotifier {
           'total': item['total'],
         };
       }).toList();
+
       // Prepare the updated filled data
       final filledData = {
-        'referenceNumber': referenceNumber, // Add this
-        'biltiNumber': biltiNumber, // Add this
-        'transportCompany': transportCompany, // Add this
+        'referenceNumber': referenceNumber,
+        'biltiNumber': biltiNumber,
+        'transportCompany': transportCompany,
         'filledNumber': filledNumber,
         'customerId': customerId,
         'customerName': customerName,
-        'mazdoori': mazdoori, // Add this line
+        'mazdoori': mazdoori,
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
@@ -357,9 +358,8 @@ class FilledProvider with ChangeNotifier {
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
         'updatedAt': DateTime.now().toIso8601String(),
-        'createdAt': createdAt,
+        'createdAt': createdAt, // Use the new date
         'numberType': isTimestamp ? 'timestamp' : 'sequential',
-
       };
 
       // Update the filled in the database
@@ -376,7 +376,7 @@ class FilledProvider with ChangeNotifier {
           String entryKey = entries.keys.first;
           Map<String, dynamic> entry = Map<String, dynamic>.from(entries[entryKey]);
 
-          // Step 2: Update the existing entry with the difference
+          // Step 2: Update the existing entry with the difference AND new date
           double currentCredit = (entry['creditAmount'] as num).toDouble();
           double newCredit = currentCredit + difference;
 
@@ -386,7 +386,11 @@ class FilledProvider with ChangeNotifier {
           await customerLedgerRef.child(entryKey).update({
             'creditAmount': newCredit,
             'remainingBalance': newRemaining,
+            'createdAt': createdAt, // Update the ledger date to match filled date
+            'updatedAt': DateTime.now().toIso8601String(),
           });
+
+          print('✅ Ledger entry updated with new date: $createdAt');
         }
       }
 
@@ -398,14 +402,14 @@ class FilledProvider with ChangeNotifier {
         // Find the item in the _items list
         final dbItem = _items.firstWhere(
               (i) => i.itemName == itemName,
-          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0,salePrice: 0.0),
+          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0, salePrice: 0.0),
         );
 
         if (dbItem.id.isNotEmpty) {
           final String itemId = dbItem.id;
           final double currentQty = dbItem.qtyOnHand;
-          final double newQty = item['qty'] ?? 0.0; // Use 'qty' instead of 'qty'
-          final double initialQty = item['initialQty'] ?? 0.0; // Ensure this is 'initialQty'
+          final double newQty = item['qty'] ?? 0.0;
+          final double initialQty = item['initialQty'] ?? 0.0;
 
           // Calculate the difference between the initial quantity and the new quantity
           double delta = initialQty - newQty;
@@ -425,7 +429,6 @@ class FilledProvider with ChangeNotifier {
       throw Exception('Failed to update filled: $e');
     }
   }
-
 
   void _processFilledEntry(String key, dynamic value) {
     // Add null check for value
@@ -615,6 +618,34 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+  Future<void> updateLedgerDateForFilled({
+    required String customerId,
+    required String filledNumber,
+    required String newDate,
+  })
+  async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final query = customerLedgerRef.orderByChild('filledNumber').equalTo(filledNumber);
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> entries = snapshot.value as Map<dynamic, dynamic>;
+
+        for (var entryKey in entries.keys) {
+          await customerLedgerRef.child(entryKey).update({
+            'createdAt': newDate,
+            'updatedAt': DateTime.now().toIso8601String(),
+          });
+        }
+
+        print('✅ Ledger dates updated for filled: $filledNumber');
+      }
+    } catch (e) {
+      print('❌ Error updating ledger dates: $e');
+      throw Exception('Failed to update ledger dates: $e');
+    }
+  }
 
   List<Map<String, dynamic>> getFilledByPaymentMethod(String paymentMethod) {
     return _filled.where((filled) {
