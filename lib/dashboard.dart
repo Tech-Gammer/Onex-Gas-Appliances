@@ -20,6 +20,7 @@ import 'Purchase/Purchase Order page.dart';
 import 'Purchase/purchaseorderlist.dart';
 import 'Reminders/reminderslistpage.dart';
 import 'Provider/lanprovider.dart';
+import 'Reports/balancesummarypage.dart';
 import 'Reports/ledgerselcttion.dart';
 import 'Reports/reportselecttionpage.dart';
 import 'bankmanagement/addbank.dart';
@@ -210,6 +211,7 @@ class _DashboardState extends State<Dashboard> {
       {'icon': Icons.group, 'titleEn': 'Customers', 'titleUr': 'کسٹمرز', 'color': Colors.blueAccent, 'page': CustomerList()},
       {'icon': Icons.account_balance_wallet, 'titleEn': 'View Ledger', 'titleUr': 'کھاتہ دیکھیں', 'color': Colors.green, 'page': const LedgerSelection()},
       {'icon': Icons.analytics, 'titleEn': 'Reports', 'titleUr': 'رپورٹس', 'color': Colors.indigo, 'page': const ReportsPage()},
+      {'icon': Icons.analytics, 'titleEn': 'Balance Summary', 'titleUr': 'بیلنس سمری', 'color': Colors.indigo, 'page': const BalanceSummaryPage()},
       {'icon': Icons.settings, 'titleEn': 'Settings', 'titleUr': 'ترتیبات', 'color': Colors.grey, 'page': UsersPage()},
     ];
 

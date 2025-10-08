@@ -246,6 +246,255 @@ class _filledpageState extends State<filledpage> {
     return afterDiscount + _mazdoori;
   }
 
+  // Future<Uint8List> _generatePDFBytes(String filledNumber) async {
+  //   final pdf = pw.Document();
+  //
+  //   // ✅ Get providers
+  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+  //   final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+  //
+  //   final filled = widget.filled ?? _currentFilled;
+  //   if (filled == null) {
+  //     throw Exception("No invoice data available");
+  //   }
+  //
+  //   // ✅ Filter empty rows
+  //   final nonEmptyRows = _filledRows.where((row) =>
+  //   (row['itemName'] as String).isNotEmpty).toList();
+  //
+  //   // ✅ Get payment details
+  //   double paidAmount = 0.0;
+  //   try {
+  //     final payments = await filledProvider.getFilledPayments(filled['filledNumber']);
+  //     paidAmount = payments.fold(
+  //         0.0, (sum, payment) => sum + (_parseToDouble(payment['amount']) ?? 0.0));
+  //   } catch (e) {
+  //     print("Error fetching payments: $e");
+  //   }
+  //
+  //   double grandTotal = _calculateGrandTotal();
+  //   double remainingAmount = grandTotal - paidAmount;
+  //
+  //
+  //   // ✅ Get remaining balance from filledledger
+  //   double remainingBalance = 0.0;
+  //   if (_selectedCustomerId != null) {
+  //     try {
+  //       remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+  //     } catch (e) {
+  //       print("Error fetching remaining balance for PDF: $e");
+  //     }
+  //   }
+  //
+  //   // ✅ Get selected customer
+  //   if (_selectedCustomerId == null) {
+  //     throw Exception("No customer selected");
+  //   }
+  //
+  //   final selectedCustomer = customerProvider.customers.firstWhere(
+  //         (customer) => customer.id == _selectedCustomerId,
+  //     orElse: () => Customer(
+  //       id: 'unknown',
+  //       name: 'Unknown Customer',
+  //       phone: '',
+  //       address: '',
+  //       city: '',
+  //     ),
+  //   );
+  //
+  //   // ✅ Handle date/time
+  //   DateTime filledDate;
+  //   if (widget.filled != null) {
+  //     filledDate = DateTime.parse(widget.filled!['createdAt']);
+  //   } else {
+  //     if (_dateController.text.isNotEmpty) {
+  //       DateTime selectedDate = DateTime.parse(_dateController.text);
+  //       DateTime now = DateTime.now();
+  //       filledDate = DateTime(
+  //         selectedDate.year,
+  //         selectedDate.month,
+  //         selectedDate.day,
+  //         now.hour,
+  //         now.minute,
+  //         now.second,
+  //       );
+  //     } else {
+  //       filledDate = DateTime.now();
+  //     }
+  //   }
+  //
+  //   final String formattedDate =
+  //       '${filledDate.day}/${filledDate.month}/${filledDate.year}';
+  //   final String formattedTime =
+  //       '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
+  //
+  //   // // ✅ Get previous balance
+  //   // double remainingBalance =
+  //   // await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
+  //   // double newBalance = remainingBalance + grandTotal;
+  //
+  //   // ✅ Load images
+  //   final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+  //   final image = pw.MemoryImage(bytes.buffer.asUint8List());
+  //
+  //   final ByteData lineBytes = await rootBundle.load('assets/images/line.png');
+  //   final lineImage = pw.MemoryImage(lineBytes.buffer.asUint8List());
+  //
+  //   final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+  //   final footerLogo = pw.MemoryImage(footerBytes.buffer.asUint8List());
+  //
+  //   // ✅ Generate PDF with MultiPage
+  //   pdf.addPage(
+  //     pw.MultiPage(
+  //       pageFormat: PdfPageFormat.a4,
+  //       margin: const pw.EdgeInsets.all(10),
+  //
+  //       // ✅ Repeating header on every page
+  //       header: (context) => pw.Column(
+  //         crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //         children: [
+  //           pw.Row(
+  //             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //             children: [
+  //               pw.Image(image, width: 250, height: 150),
+  //               pw.Column(
+  //                 crossAxisAlignment: pw.CrossAxisAlignment.end,
+  //                 children: [
+  //                   pw.Text(
+  //                     'Onex Gas Appliances',
+  //                     style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+  //                   ),
+  //                   pw.Text('Customer Invoice', style: const pw.TextStyle(fontSize: 12)),
+  //                 ],
+  //               ),
+  //             ],
+  //           ),
+  //           pw.Divider(),
+  //         ],
+  //       ),
+  //
+  //       // ✅ Footer (on every page)
+  //       footer: (context) => pw.Column(
+  //         children: [
+  //           pw.Divider(),
+  //           pw.Row(
+  //             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //             children: [
+  //               pw.Image(footerLogo, width: 30, height: 20),
+  //               pw.Image(lineImage, width: 150, height: 50),
+  //               pw.Column(
+  //                 crossAxisAlignment: pw.CrossAxisAlignment.center,
+  //                 children: [
+  //                   pw.Text('Developed By: Umair Arshad',
+  //                       style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+  //                   pw.Text('Contact: 0307-6455926',
+  //                       style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+  //                 ],
+  //               ),
+  //             ],
+  //           ),
+  //         ],
+  //       ),
+  //
+  //       // ✅ Page body
+  //       build: (context) => [
+  //         // Customer Details
+  //         pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 11)),
+  //         pw.Text('Customer Address: ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 11)),
+  //         pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 11)),
+  //         pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
+  //         pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
+  //         pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
+  //         pw.Text('Bilti Number: ${_biltiNumberController.text}', style: const pw.TextStyle(fontSize: 11)),
+  //         pw.Text('Transport Company: ${_transportCompanyController.text}', style: const pw.TextStyle(fontSize: 11)),
+  //         pw.SizedBox(height: 10),
+  //
+  //         // Table
+  //         pw.Table.fromTextArray(
+  //           headers: [
+  //             pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
+  //             // pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
+  //             pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
+  //             pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
+  //             pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
+  //           ],
+  //           data: nonEmptyRows.map((row) {
+  //             return [
+  //               pw.Text(row['itemName'] ?? '', style: const pw.TextStyle(fontSize: 10)),
+  //               // pw.Text(row['description'] ?? '', style: const pw.TextStyle(fontSize: 10)),
+  //               pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
+  //               pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+  //               pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+  //             ];
+  //           }).toList(),
+  //           // ✅ Fix: give the Qty column a narrow width
+  //           columnWidths: {
+  //             0: const pw.FlexColumnWidth(4), // Item Name (wide)
+  //             1: const pw.FlexColumnWidth(1), // ✅ Qty (narrow)
+  //             2: const pw.FlexColumnWidth(2), // Rate
+  //             3: const pw.FlexColumnWidth(2), // Total
+  //           },
+  //           // ✅ Align columns properly
+  //           // ✅ Correct alignments (4 columns only)
+  //           cellAlignments: {
+  //             0: pw.Alignment.centerLeft,   // Item Name → left
+  //             1: pw.Alignment.centerRight,  // ✅ Qty → right aligned
+  //             2: pw.Alignment.centerRight,  // Rate → right aligned
+  //             3: pw.Alignment.centerRight,  // Total → right aligned
+  //           },
+  //         ),
+  //
+  //         pw.SizedBox(height: 10),
+  //
+  //         pw.Row(
+  //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //           children: [
+  //             pw.Text('Invoice Amount:',
+  //                 style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+  //             pw.Text(grandTotal.toStringAsFixed(2),
+  //                 style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+  //           ],
+  //         ),
+  //         pw.Row(
+  //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //           children: [
+  //             pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+  //             pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+  //           ],
+  //         ),
+  //         pw.SizedBox(
+  //           height: 10,
+  //         ),
+  //         pw.Row(
+  //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //           children: [
+  //             pw.Text('Remaining Balance:',
+  //                 style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+  //             pw.Text(remainingBalance.toStringAsFixed(2),
+  //                 style: pw.TextStyle(
+  //                   fontSize: 12,
+  //                   fontWeight: pw.FontWeight.bold,
+  //                   color: remainingBalance > 0 ? PdfColors.red : PdfColors.black,
+  //                 )),
+  //           ],
+  //         ),
+  //
+  //         pw.SizedBox(height: 60),
+  //         pw.Row(
+  //           mainAxisAlignment: pw.MainAxisAlignment.end,
+  //           children: [
+  //             pw.Text('......................',
+  //                 style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+  //           ],
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  //
+  //   return pdf.save();
+  // }
+
   Future<Uint8List> _generatePDFBytes(String filledNumber) async {
     final pdf = pw.Document();
 
@@ -260,8 +509,9 @@ class _filledpageState extends State<filledpage> {
     }
 
     // ✅ Filter empty rows
-    final nonEmptyRows = _filledRows.where((row) =>
-    (row['itemName'] as String).isNotEmpty).toList();
+    final nonEmptyRows = _filledRows
+        .where((row) => (row['itemName'] as String).isNotEmpty)
+        .toList();
 
     // ✅ Get payment details
     double paidAmount = 0.0;
@@ -275,6 +525,16 @@ class _filledpageState extends State<filledpage> {
 
     double grandTotal = _calculateGrandTotal();
     double remainingAmount = grandTotal - paidAmount;
+
+    // ✅ Get remaining balance from filledledger
+    double remainingBalance = 0.0;
+    if (_selectedCustomerId != null) {
+      try {
+        remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+      } catch (e) {
+        print("Error fetching remaining balance for PDF: $e");
+      }
+    }
 
     // ✅ Get selected customer
     if (_selectedCustomerId == null) {
@@ -318,11 +578,6 @@ class _filledpageState extends State<filledpage> {
     final String formattedTime =
         '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
 
-    // ✅ Get previous balance
-    double remainingBalance =
-    await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
-    double newBalance = remainingBalance + grandTotal;
-
     // ✅ Load images
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
     final image = pw.MemoryImage(bytes.buffer.asUint8List());
@@ -339,14 +594,14 @@ class _filledpageState extends State<filledpage> {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(10),
 
-        // ✅ Repeating header on every page
+        // ✅ Header
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Image(image, width: 200, height: 150),
+                pw.Image(image, width: 250, height: 150),
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
@@ -363,7 +618,7 @@ class _filledpageState extends State<filledpage> {
           ],
         ),
 
-        // ✅ Footer (on every page)
+        // ✅ Footer
         footer: (context) => pw.Column(
           children: [
             pw.Divider(),
@@ -386,47 +641,134 @@ class _filledpageState extends State<filledpage> {
           ],
         ),
 
-        // ✅ Page body
+        // ✅ Page Body
         build: (context) => [
-          // Customer Details
-          pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 11)),
-          pw.Text('Customer Address: ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 11)),
-          pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 11)),
+          pw.Text('Customer Name: ${selectedCustomer.name}',
+              style: const pw.TextStyle(fontSize: 11)),
+          pw.Text('Customer Address: ${selectedCustomer.address}',
+              style: const pw.TextStyle(fontSize: 11)),
+          pw.Text('Customer Number: ${selectedCustomer.phone}',
+              style: const pw.TextStyle(fontSize: 11)),
           pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
           pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
-          pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
-          pw.Text('Bilti Number: ${_biltiNumberController.text}', style: const pw.TextStyle(fontSize: 11)),
-          pw.Text('Transport Company: ${_transportCompanyController.text}', style: const pw.TextStyle(fontSize: 11)),
+          pw.Text('Reference: ${_referenceController.text}',
+              style: const pw.TextStyle(fontSize: 12)),
+          pw.Text('Bilti Number: ${_biltiNumberController.text}',
+              style: const pw.TextStyle(fontSize: 11)),
+          pw.Text('Transport Company: ${_transportCompanyController.text}',
+              style: const pw.TextStyle(fontSize: 11)),
           pw.SizedBox(height: 10),
 
-          // Table
-          pw.Table.fromTextArray(
-            headers: [
-              pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
-              pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
-              pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
-              pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
-              pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
-            ],
-            data: nonEmptyRows.map((row) {
-              return [
-                pw.Text(row['itemName'] ?? '', style: const pw.TextStyle(fontSize: 10)),
-                pw.Text(row['description'] ?? '', style: const pw.TextStyle(fontSize: 10)),
-                pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
-                pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
-                pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
-              ];
-            }).toList(),
-          ),
-
-          pw.SizedBox(height: 10),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          // ✅ Fixed Table
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5, color: PdfColors.grey),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(4),   // Item Name
+              1: const pw.FlexColumnWidth(1.2), // Qty
+              2: const pw.FlexColumnWidth(2),   // Rate
+              3: const pw.FlexColumnWidth(2),   // Total
+            },
             children: [
-              pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
-              pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+              // Header Row
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(4),
+                    child: pw.Text('Item Name',
+                        style: pw.TextStyle(
+                            fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(4),
+                    child: pw.Center(
+                      child: pw.Text('Qty(Pcs)',
+                          style: pw.TextStyle(
+                              fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(4),
+                    child: pw.Align(
+                      alignment: pw.Alignment.centerRight,
+                      child: pw.Text('Rate',
+                          style: pw.TextStyle(
+                              fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(4),
+                    child: pw.Align(
+                      alignment: pw.Alignment.centerRight,
+                      child: pw.Text('Total',
+                          style: pw.TextStyle(
+                              fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Data Rows
+              ...nonEmptyRows.map((row) {
+                return pw.TableRow(
+                  children: [
+                    // Item Name
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(row['itemName'] ?? '',
+                          style: const pw.TextStyle(fontSize: 10)),
+                    ),
+
+                    // ✅ Qty Column (centered but right-aligned internally)
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                      child: pw.Align(
+                        alignment: pw.Alignment.center,
+                        child: pw.Container(
+                          width: 30,
+                          child: pw.Align(
+                            alignment: pw.Alignment.centerRight,
+                            child: pw.Text(
+                              (row['qty'] ?? 0).toString(),
+                              style: const pw.TextStyle(fontSize: 10),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Rate
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Align(
+                        alignment: pw.Alignment.centerRight,
+                        child: pw.Text(
+                          (row['rate'] ?? 0.0).toStringAsFixed(2),
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ),
+
+                    // Total
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Align(
+                        alignment: pw.Alignment.centerRight,
+                        child: pw.Text(
+                          (row['total'] ?? 0.0).toStringAsFixed(2),
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }),
             ],
           ),
+
+          pw.SizedBox(height: 10),
+
+          // ✅ Totals Section
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
@@ -436,6 +778,29 @@ class _filledpageState extends State<filledpage> {
                   style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
             ],
           ),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+              pw.Text(_discount.toStringAsFixed(2),
+                  style: const pw.TextStyle(fontSize: 12)),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Remaining Balance:',
+                  style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              pw.Text(remainingBalance.toStringAsFixed(2),
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                    color: remainingBalance > 0 ? PdfColors.red : PdfColors.black,
+                  )),
+            ],
+          ),
+
           pw.SizedBox(height: 60),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.end,
@@ -1671,7 +2036,7 @@ class _filledpageState extends State<filledpage> {
       }).toList();
     } else if (widget.filled == null) {
       // Initialize with 10 empty rows for new invoices
-      _filledRows = List.generate(5, (index) => {
+      _filledRows = List.generate(10, (index) => {
         'total': 0.0,
         'rate': 0.0,
         'qty': 0.0,
@@ -2574,7 +2939,7 @@ class _filledpageState extends State<filledpage> {
                   children: [
                     // Item Name (Autocomplete)
                     Expanded(
-                      flex: 3,
+                      flex: 5,
                       child: CustomAutocomplete(
                         items: _items,
                         controller: _filledRows[index]['itemNameController'],
@@ -2598,25 +2963,25 @@ class _filledpageState extends State<filledpage> {
                     ),
 
                     // Description
-                    Expanded(
-                      flex: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: TextField(
-                          controller: _filledRows[index]['descriptionController'],
-                          decoration: InputDecoration(
-                            hintText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          ),
-                          maxLines: 1,
-                          onChanged: (value) => _updateRow(index, 'description', value),
-                        ),
-                      ),
-                    ),
+                    // Expanded(
+                    //   flex: 2,
+                    //   child: Padding(
+                    //     padding: const EdgeInsets.symmetric(horizontal: 4),
+                    //     child: TextField(
+                    //       controller: _filledRows[index]['descriptionController'],
+                    //       decoration: InputDecoration(
+                    //         hintText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                    //         border: OutlineInputBorder(
+                    //           borderRadius: BorderRadius.circular(8),
+                    //           borderSide: BorderSide(color: Colors.grey[300]!),
+                    //         ),
+                    //         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    //       ),
+                    //       maxLines: 1,
+                    //       onChanged: (value) => _updateRow(index, 'description', value),
+                    //     ),
+                    //   ),
+                    // ),
 
                     // Quantity
                     Expanded(

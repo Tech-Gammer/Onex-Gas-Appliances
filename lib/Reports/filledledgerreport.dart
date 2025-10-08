@@ -417,19 +417,19 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                         children: [
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
-                            child: pw.Text("Item", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                            child: pw.Text("Item", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
-                            child: pw.Text("Qty", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),textAlign: pw.TextAlign.right),
+                            child: pw.Text("Qty", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),textAlign: pw.TextAlign.right),
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
-                            child: pw.Text("Rate", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                            child: pw.Text("Rate", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
-                            child: pw.Text("Total", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                            child: pw.Text("Total", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                           ),
                         ],
                       ),
@@ -438,21 +438,21 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                           children: [
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(3),
-                              child: pw.Text(item['itemName']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 8)),
+                              child: pw.Text(item['itemName']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 11)),
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(3),
-                              child: pw.Text("${item['quantity']}", style: const pw.TextStyle(fontSize: 8),textAlign: pw.TextAlign.right,),
+                              child: pw.Text("${item['quantity']}", style: const pw.TextStyle(fontSize: 11),textAlign: pw.TextAlign.right,),
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(3),
-                              child: pw.Text("Rs ${(item['price'] ?? 0).toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 8)),
+                              child: pw.Text("Rs ${(item['price'] ?? 0).toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 11)),
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(3),
                               child: pw.Text(
                                 "Rs ${(item['total'] ?? 0).toStringAsFixed(2)}",
-                                style:  pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                                style:  pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
                               ),
                             ),
                           ],
