@@ -180,6 +180,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 20), // 🔹 Reduced side borders
           build: (pw.Context context) {
             return [
               pw.Header(
@@ -403,7 +404,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                     },
                     children: [
                       pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfColors.orange100),
+                        // decoration: const pw.BoxDecoration(color: PdfColors.orange100),
                         children: [
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
@@ -450,7 +451,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       }),
                       // 👉 Invoice Grand Total Row
                       pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfColors.green100),
+                        // decoration: const pw.BoxDecoration(color: PdfColors.green100),
                         children: [
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
@@ -487,7 +488,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       pw.Container(
         padding: const pw.EdgeInsets.all(6),
         decoration: pw.BoxDecoration(
-          color: PdfColors.orange100,
+          // color: PdfColors.orange100,
           border: const pw.Border(
             top: pw.BorderSide(color: PdfColors.orange, width: 1.5),
           ),
@@ -530,11 +531,11 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     return pw.Column(children: rows);
   }
 
-// Helper method to build opening balance row for PDF
   pw.Widget _buildOpeningBalancePdfRow(
       FilledCustomerReportProvider provider,
       LanguageProvider languageProvider,
-      double openingBalanceDisplay) {
+      double openingBalanceDisplay)
+  {
     return pw.Container(
       padding: const pw.EdgeInsets.all(6),
       decoration: pw.BoxDecoration(color: PdfColors.grey100),
