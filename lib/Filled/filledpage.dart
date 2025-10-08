@@ -430,34 +430,12 @@ class _filledpageState extends State<filledpage> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
-              pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-            ],
-          ),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
               pw.Text('Invoice Amount:',
                   style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
               pw.Text(grandTotal.toStringAsFixed(2),
                   style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
             ],
           ),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text('Paid Amount:', style: const pw.TextStyle(fontSize: 12)),
-              pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-            ],
-          ),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text('Remaining Amount:', style: const pw.TextStyle(fontSize: 12)),
-              pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-            ],
-          ),
-
           pw.SizedBox(height: 60),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.end,

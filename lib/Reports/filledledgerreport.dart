@@ -155,6 +155,10 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       final openingBalance = provider.openingBalance ?? 0;
       final transactions = provider.transactions ?? [];
 
+      // ✅ Load images
+      final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+      final image = pw.MemoryImage(bytes.buffer.asUint8List());
+
       double totalDebit = 0;
       double totalCredit = 0;
       double finalBalance = openingBalance; // carry forward
@@ -185,12 +189,18 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
             return [
               pw.Header(
                 level: 0,
-                child: pw.Text(
-                  'Party Statement',
-                  style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-                ),
+                child: pw.Row(
+                  children: [
+                    pw.Image(image, width: 200, height: 150),
+                    pw.Spacer(),
+                    pw.Text(
+                      'Party Statement',
+                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                    ),
+                  ]
+                )
               ),
-              pw.SizedBox(height: 20),
+              pw.SizedBox(height: 8),
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -219,7 +229,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                   ),
                 ],
               ),
-              pw.SizedBox(height: 20),
               pw.Header(
                 level: 1,
                 child: pw.Text('Transaction Details'),
@@ -412,7 +421,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
-                            child: pw.Text("Qty", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                            child: pw.Text("Qty", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),textAlign: pw.TextAlign.right),
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(3),
@@ -433,7 +442,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(3),
-                              child: pw.Text("${item['quantity']}", style: const pw.TextStyle(fontSize: 8)),
+                              child: pw.Text("${item['quantity']}", style: const pw.TextStyle(fontSize: 8),textAlign: pw.TextAlign.right,),
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(3),
@@ -788,7 +797,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     required IconData icon,
     required Color color,
     required bool isMobile,
-  }) {
+  })
+  {
     return Expanded(
       child: Container(
         margin: EdgeInsets.symmetric(horizontal: 8),
@@ -1236,7 +1246,6 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     );
   }
 
-// Extract opening balance row into a separate method for reusability
   Widget _buildOpeningBalanceRow(
       FilledCustomerReportProvider reportProvider,
       LanguageProvider languageProvider,
