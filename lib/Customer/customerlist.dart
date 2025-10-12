@@ -895,7 +895,7 @@ class _CustomerListState extends State<CustomerList> {
                                       )),
                                   DataColumn(
                                     label: Text(
-                                      languageProvider.isEnglish ? 'Item Prices' : 'قیمتیں',
+                                      languageProvider.isEnglish ? 'Prices' : 'قیمتیں',
                                       style: const TextStyle(fontSize: 20),
                                     ),
                                   ),
@@ -960,7 +960,7 @@ class _CustomerListState extends State<CustomerList> {
                                               foregroundColor: Colors.white,
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             ),
-                                            icon: const Icon(Icons.price_check),
+                                            // icon: const Icon(Icons.price_check),
                                             label: Text(languageProvider.isEnglish ? 'Rates' : 'ریٹس'),
                                             onPressed: () {
                                               Navigator.push(
