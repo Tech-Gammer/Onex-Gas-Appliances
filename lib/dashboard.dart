@@ -202,7 +202,6 @@ class _DashboardState extends State<Dashboard> {
 
     final isWeb = MediaQuery.of(context).size.width > 600;
     final crossAxisCount = isWeb ? 4 : 2;
-
     final dashboardItems = [
       {'icon': Icons.receipt_long, 'titleEn': 'Quotation', 'titleUr': 'بل اندراج', 'color': Colors.deepPurple, 'page': QuotationListPage()},
       {'icon': Icons.inventory, 'titleEn': 'Invoice', 'titleUr': 'انوائس اندراج', 'color': Colors.orange, 'page': filledListpage()},
@@ -214,7 +213,6 @@ class _DashboardState extends State<Dashboard> {
       {'icon': Icons.analytics, 'titleEn': 'Balance Summary', 'titleUr': 'بیلنس سمری', 'color': Colors.indigo, 'page': const BalanceSummaryPage()},
       {'icon': Icons.settings, 'titleEn': 'Settings', 'titleUr': 'ترتیبات', 'color': Colors.grey, 'page': UsersPage()},
     ];
-
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: GridView.builder(

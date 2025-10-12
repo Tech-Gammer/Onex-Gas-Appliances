@@ -540,6 +540,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
     return pw.Column(children: rows);
   }
 
+
   pw.Widget _buildOpeningBalancePdfRow(
       FilledCustomerReportProvider provider,
       LanguageProvider languageProvider,
