@@ -17,7 +17,7 @@ class FilledCustomerReportProvider with ChangeNotifier {
   bool get isFiltered => _dateRangeFilter != null;
   List<Map<String, dynamic>> get transactions => _dateRangeFilter == null ? _allTransactions : _filteredTransactions;
   DateTime? openingBalanceDate;
-
+Map<String, dynamic>? _openingBalanceTransaction;
 
   double get displayOpeningBalance {
     if (!isFiltered || _dateRangeFilter == null) {
@@ -109,47 +109,88 @@ class FilledCustomerReportProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void _applyDateFilter(DateTimeRange range) {
-    print('Applying date filter from ${range.start} to ${range.end}');
+  // void _applyDateFilter(DateTimeRange range) {
+  //   print('Applying date filter from ${range.start} to ${range.end}');
+  //
+  //   // Filter transactions by date range
+  //   _filteredTransactions = _allTransactions.where((transaction) {
+  //     // Use the 'date' field which should contain the createdAt value
+  //     final dateValue = transaction['date'] ?? transaction['createdAt'];
+  //     final date = _parseFirebaseDate(dateValue);
+  //
+  //     if (date == null) {
+  //       print('Skipping transaction with invalid date: $dateValue');
+  //       return false;
+  //     }
+  //
+  //     // Convert date to start of day for proper comparison
+  //     final transactionDate = DateTime(date.year, date.month, date.day);
+  //     final rangeStart = DateTime(range.start.year, range.start.month, range.start.day);
+  //     final rangeEnd = DateTime(range.end.year, range.end.month, range.end.day);
+  //
+  //     // FIXED: Use proper date range comparison
+  //     final isInRange = (transactionDate.isAtSameMomentAs(rangeStart) ||
+  //         transactionDate.isAtSameMomentAs(rangeEnd) ||
+  //         (transactionDate.isAfter(rangeStart) && transactionDate.isBefore(rangeEnd)));
+  //
+  //     print('Transaction ${transaction['referenceNumber']} on $transactionDate - in range: $isInRange');
+  //     return isInRange;
+  //   }).toList();
+  //
+  //   print('Found ${_filteredTransactions.length} matching transactions out of ${_allTransactions.length} total');
+  //
+  //   // Sort filtered transactions by date
+  //   _filteredTransactions.sort((a, b) {
+  //     final dateA = _parseFirebaseDate(a['date'] ?? a['createdAt']) ?? DateTime(2000);
+  //     final dateB = _parseFirebaseDate(b['date'] ?? b['createdAt']) ?? DateTime(2000);
+  //     return dateA.compareTo(dateB);
+  //   });
+  //
+  //   // Recalculate balances for filtered transactions
+  //   _recalculateBalancesForFiltered();
+  //
+  //   // Update report with filtered data
+  //   _calculateReport(_filteredTransactions);
+  // }
 
-    // Filter transactions by date range
+  void _applyDateFilter(DateTimeRange dateRange) {
+    final startDate = DateTime(dateRange.start.year, dateRange.start.month, dateRange.start.day);
+    final endDate = DateTime(dateRange.end.year, dateRange.end.month, dateRange.end.day, 23, 59, 59);
+
     _filteredTransactions = _allTransactions.where((transaction) {
-      // Use the 'date' field which should contain the createdAt value
-      final dateValue = transaction['date'] ?? transaction['createdAt'];
-      final date = _parseFirebaseDate(dateValue);
+      final transactionDate = _parseFirebaseDate(transaction['date']);
+      if (transactionDate == null) return false;
 
-      if (date == null) {
-        print('Skipping transaction with invalid date: $dateValue');
-        return false;
-      }
-
-      // Convert date to start of day for proper comparison
-      final transactionDate = DateTime(date.year, date.month, date.day);
-      final rangeStart = DateTime(range.start.year, range.start.month, range.start.day);
-      final rangeEnd = DateTime(range.end.year, range.end.month, range.end.day);
-
-      // FIXED: Use proper date range comparison
-      final isInRange = (transactionDate.isAtSameMomentAs(rangeStart) ||
-          transactionDate.isAtSameMomentAs(rangeEnd) ||
-          (transactionDate.isAfter(rangeStart) && transactionDate.isBefore(rangeEnd)));
-
-      print('Transaction ${transaction['referenceNumber']} on $transactionDate - in range: $isInRange');
-      return isInRange;
+      return transactionDate.isAfter(startDate.subtract(const Duration(days: 1))) &&
+          transactionDate.isBefore(endDate.add(const Duration(days: 1)));
     }).toList();
 
-    print('Found ${_filteredTransactions.length} matching transactions out of ${_allTransactions.length} total');
+    // Calculate opening balance for filtered view
+    double filteredOpeningBalance = openingBalance;
 
-    // Sort filtered transactions by date
-    _filteredTransactions.sort((a, b) {
-      final dateA = _parseFirebaseDate(a['date'] ?? a['createdAt']) ?? DateTime(2000);
-      final dateB = _parseFirebaseDate(b['date'] ?? b['createdAt']) ?? DateTime(2000);
-      return dateA.compareTo(dateB);
-    });
+    // Add transactions that occurred before the filter start date
+    final preFilterTransactions = _allTransactions.where((transaction) {
+      final transactionDate = _parseFirebaseDate(transaction['date']);
+      if (transactionDate == null) return false;
+      return transactionDate.isBefore(startDate);
+    }).toList();
 
-    // Recalculate balances for filtered transactions
-    _recalculateBalancesForFiltered();
+    // Calculate the balance as of the day before the filter starts
+    for (final transaction in preFilterTransactions) {
+      final debit = (transaction['debit'] ?? 0.0).toDouble();
+      final credit = (transaction['credit'] ?? 0.0).toDouble();
+      filteredOpeningBalance = filteredOpeningBalance + credit - debit;
+    }
 
-    // Update report with filtered data
+    // Now calculate running balance for filtered transactions
+    double runningBalance = filteredOpeningBalance;
+    for (int i = 0; i < _filteredTransactions.length; i++) {
+      final debit = (_filteredTransactions[i]['debit'] ?? 0.0).toDouble();
+      final credit = (_filteredTransactions[i]['credit'] ?? 0.0).toDouble();
+      runningBalance = runningBalance + credit - debit;
+      _filteredTransactions[i]['balance'] = runningBalance;
+    }
+
     _calculateReport(_filteredTransactions);
   }
 
@@ -256,29 +297,50 @@ class FilledCustomerReportProvider with ChangeNotifier {
   }
 
 
-  void _calculateReport(List<Map<String, dynamic>> transactionsList) {
+  // void _calculateReport(List<Map<String, dynamic>> transactionsList) {
+  //   double totalDebit = 0.0;
+  //   double totalCredit = 0.0;
+  //   double finalBalance = 0.0;
+  //
+  //   // Only use opening balance if we're not filtering or if we have transactions
+  //   if (!isFiltered || transactionsList.isNotEmpty) {
+  //     finalBalance = displayOpeningBalance;
+  //   }
+  //
+  //   for (var transaction in transactionsList) {
+  //     final debit = (transaction['debit'] ?? 0.0).toDouble();
+  //     final credit = (transaction['credit'] ?? 0.0).toDouble();
+  //
+  //     totalDebit += debit;
+  //     totalCredit += credit;
+  //     finalBalance = finalBalance + credit - debit;
+  //   }
+  //
+  //   report = {
+  //     'debit': totalDebit,
+  //     'credit': totalCredit,
+  //     'balance': finalBalance,
+  //     'openingBalance': displayOpeningBalance,
+  //   };
+  // }
+
+  void _calculateReport(List<Map<String, dynamic>> transactions) {
     double totalDebit = 0.0;
     double totalCredit = 0.0;
-    double finalBalance = 0.0;
 
-    // Only use opening balance if we're not filtering or if we have transactions
-    if (!isFiltered || transactionsList.isNotEmpty) {
-      finalBalance = displayOpeningBalance;
+    // Calculate totals from transactions only (excluding opening balance)
+    for (var transaction in transactions) {
+      totalDebit += (transaction['debit'] ?? 0.0).toDouble();
+      totalCredit += (transaction['credit'] ?? 0.0).toDouble();
     }
 
-    for (var transaction in transactionsList) {
-      final debit = (transaction['debit'] ?? 0.0).toDouble();
-      final credit = (transaction['credit'] ?? 0.0).toDouble();
-
-      totalDebit += debit;
-      totalCredit += credit;
-      finalBalance = finalBalance + credit - debit;
-    }
+    // Calculate final balance: opening + credit transactions - debit transactions
+    double finalBalance = displayOpeningBalance + totalCredit - totalDebit;
 
     report = {
       'debit': totalDebit,
-      'credit': totalCredit,
-      'balance': finalBalance,
+      'credit': totalCredit, // Only transaction credits
+      'balance': finalBalance, // Final net balance including opening
       'openingBalance': displayOpeningBalance,
     };
   }
@@ -582,7 +644,6 @@ class FilledCustomerReportProvider with ChangeNotifier {
         final data = Map<String, dynamic>.from(snapshot.snapshot.value as Map);
 
         List<Map<String, dynamic>> tempTransactions = [];
-        bool hasOpeningBalanceTransaction = false;
 
         for (var entry in data.entries) {
           final transaction = Map<String, dynamic>.from(entry.value);
@@ -593,18 +654,33 @@ class FilledCustomerReportProvider with ChangeNotifier {
               transaction['description']?.toString().toLowerCase().contains('opening balance') == true;
 
           if (isOpeningBalance) {
-            hasOpeningBalanceTransaction = true;
-            continue; // Skip adding to transactions list but mark that we found one
+            // Store opening balance transaction separately but don't add to main transactions list
+            _openingBalanceTransaction = {
+              'id': entry.key,
+              'key': entry.key,
+              'date': transaction['createdAt'],
+              'details': 'Opening Balance',
+              'debit': 0.0,
+              'credit': (transaction['creditAmount'] ?? 0.0).toDouble(),
+              'balance': (transaction['creditAmount'] ?? 0.0).toDouble(),
+              'isOpeningBalance': true,
+            };
+            continue; // Skip adding to regular transactions list
           }
 
           final paymentMethod = transaction['paymentMethod']?.toString().toLowerCase();
           final status = transaction['status']?.toString().toLowerCase();
 
-          // Skip uncleared cheques
-          if (paymentMethod == 'cheque' && status != 'cleared') continue;
+          // Skip uncleared cheques - only include cleared cheques
+          if (paymentMethod == 'cheque' && status != 'cleared') {
+            continue;
+          }
 
           final debit = (transaction['debitAmount'] ?? 0.0).toDouble();
           final credit = (transaction['creditAmount'] ?? 0.0).toDouble();
+
+          // Skip transactions with both zero debit and credit
+          if (debit == 0.0 && credit == 0.0) continue;
 
           // Store the original createdAt value and also create a standardized date field
           final originalDate = transaction['createdAt'];
@@ -616,27 +692,37 @@ class FilledCustomerReportProvider with ChangeNotifier {
             'key': entry.key,
             'date': dateString, // Standardized date format
             'originalDate': originalDate, // Keep original for debugging
-            'details': transaction['details'] ?? '',
+            'details': transaction['description'] ?? transaction['details'] ?? '',
             'filledNumber': transaction['filledNumber'] ?? '',
             'referenceNumber': transaction['referenceNumber'] ?? '',
             'filledId': transaction['filledId'] ?? transaction['referenceNumber'] ?? '',
             'bankName': transaction['bankName'] ?? '',
-            'paymentMethod': paymentMethod ?? '',
+            'paymentMethod': transaction['paymentMethod'] ?? '',
+            'chequeNumber': transaction['chequeNumber'] ?? '',
+            'chequeStatus': transaction['status'] ?? '',
             'debit': debit,
             'credit': credit,
-            'balance': 0.0,
+            'balance': 0.0, // Will be calculated later
+            'isInvoice': credit > 0, // Mark as invoice if credit amount > 0
           });
         }
 
-        // Sort transactions by date (ascending)
+        // Sort transactions by date (ascending for proper balance calculation)
         tempTransactions.sort((a, b) {
           final dateA = _parseFirebaseDate(a['date']) ?? DateTime(2000);
           final dateB = _parseFirebaseDate(b['date']) ?? DateTime(2000);
           return dateA.compareTo(dateB);
         });
 
-        // Calculate running balance after sorting
+        // Calculate running balance starting from opening balance
         double runningBalance = openingBalance;
+
+        // If we have an opening balance transaction and no date filter, include it
+        if (_openingBalanceTransaction != null && _dateRangeFilter == null) {
+          _openingBalanceTransaction!['balance'] = runningBalance;
+        }
+
+        // Calculate balance for each transaction
         for (int i = 0; i < tempTransactions.length; i++) {
           final debit = tempTransactions[i]['debit'] as double;
           final credit = tempTransactions[i]['credit'] as double;
@@ -653,18 +739,19 @@ class FilledCustomerReportProvider with ChangeNotifier {
           _calculateReport(_allTransactions);
         }
 
-        // Update the UI to show correct entry count including opening balance
-        notifyListeners();
       } else {
+        // No transactions found, set report with opening balance only
         report = {
           'debit': 0.0,
           'credit': 0.0,
           'balance': openingBalance,
           'openingBalance': openingBalance,
         };
+        _allTransactions = [];
       }
     } catch (e) {
       error = 'Failed to fetch customer report: $e';
+      print('Error fetching customer report: $e');
       report = {
         'debit': 0.0,
         'credit': 0.0,

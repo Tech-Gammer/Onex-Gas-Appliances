@@ -750,16 +750,17 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
 
   Widget _buildSummaryCards(FilledCustomerReportProvider provider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
-    // Get the opening/previous balance
+
+    // Get values from the report which now has correct calculations
     final double openingBalance = provider.displayOpeningBalance;
-
     final double debit = provider.report['debit']?.toDouble() ?? 0.0;
-    // final double credit = provider.report['credit']?.toDouble() ?? 0.0;
-    double totalCredit = openingBalance + (provider.report['credit']?.toDouble() ?? 0.0);
-    final double balance = provider.report['balance']?.toDouble() ?? 0.0;
+    final double credit = provider.report['credit']?.toDouble() ?? 0.0; // Transaction credits only
+    final double netBalance = provider.report['balance']?.toDouble() ?? 0.0; // Final net balance
 
-    // If we're filtered and have no transactions, show zero balance
-    final displayBalance = provider.isFiltered && provider.transactions.isEmpty ? 0.0 : balance;
+    // For filtered views with no transactions, show the opening balance as net balance
+    final displayNetBalance = provider.isFiltered && provider.transactions.isEmpty
+        ? openingBalance
+        : netBalance;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -775,16 +776,16 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           ),
           _buildModernSummaryCard(
             title: 'Total Credit',
-            value: totalCredit,
+            value: credit, // Just transaction credits
             icon: Icons.trending_up,
             color: Color(0xFF81C784),
             isMobile: isMobile,
           ),
           _buildModernSummaryCard(
-            title: 'Net Balance',
-            value: displayBalance, // Use the adjusted balance
+            title: provider.isFiltered ? 'Closing Balance' : 'Net Balance',
+            value: displayNetBalance,
             icon: Icons.account_balance_wallet,
-            color: displayBalance >= 0 ? Color(0xFF64B5F6) : Color(0xFFFFB74D),
+            color: displayNetBalance >= 0 ? Color(0xFF64B5F6) : Color(0xFFFFB74D),
             isMobile: isMobile,
           ),
         ],

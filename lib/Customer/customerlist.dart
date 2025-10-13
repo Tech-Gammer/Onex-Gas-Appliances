@@ -122,10 +122,19 @@ class _CustomerListState extends State<CustomerList> {
           if (value != null && value is Map) {
             final debitAmount = (value['debitAmount'] ?? 0.0).toDouble();
             final creditAmount = (value['creditAmount'] ?? 0.0).toDouble();
+            final paymentMethod = value['paymentMethod']?.toString() ?? '';
+            final chequeStatus = value['status']?.toString();
 
-            // For opening balance (credit), add to balance
-            // For payments (debit), subtract from balance
-            remainingBalance = remainingBalance + creditAmount - debitAmount;
+            // For cheque payments, only include if status is 'cleared'
+            if (paymentMethod.toLowerCase() == 'cheque') {
+              if (chequeStatus == 'cleared') {
+                remainingBalance = remainingBalance + creditAmount - debitAmount;
+              }
+              // Skip pending or bounced cheques
+            } else {
+              // For all other payment methods, include normally
+              remainingBalance = remainingBalance + creditAmount - debitAmount;
+            }
           }
         });
       }
