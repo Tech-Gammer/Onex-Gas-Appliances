@@ -532,7 +532,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                     children: [
                       pw.Image(logo, width: 120, height: 120),
                       pw.Text(
-                        'M. Zeeshan: 0300-6400717',
+                        'M. Hamza: 0335-4393403',
                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                       ),
                       pw.SizedBox(height: 5),
