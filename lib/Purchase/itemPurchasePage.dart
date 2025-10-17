@@ -51,12 +51,49 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
   Map<String, double> _wastageRecords = {};
 
 
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   _selectedDateTime = DateTime.now();
+  //   _vendorSearchController = TextEditingController();
+  //   if (widget.initialItems.isNotEmpty) {
+  //     _purchaseItems = widget.initialItems.map((item) {
+  //       return PurchaseItem()
+  //         ..itemNameController.text = item['itemName']?.toString() ?? ''
+  //         ..quantityController.text = (item['quantity'] as num?)?.toString() ?? '0'
+  //         ..priceController.text = (item['purchasePrice'] as num?)?.toString() ?? '0';
+  //     }).toList();
+  //   } else {
+  //     // Default to 3 empty items if not from purchase order
+  //     _purchaseItems = List.generate(3, (index) => PurchaseItem());
+  //   }
+  //   // Initialize vendor data
+  //   if (widget.initialVendorId != null && widget.initialVendorName != null) {
+  //     WidgetsBinding.instance.addPostFrameCallback((_) {
+  //       if (mounted) {
+  //         setState(() {
+  //           _selectedVendor = {
+  //             'key': widget.initialVendorId,
+  //             'name': widget.initialVendorName,
+  //           };
+  //           _vendorSearchController.text = widget.initialVendorName!;
+  //         });
+  //       }
+  //     });
+  //   }
+  //   fetchItems();
+  //   fetchVendors();
+  // }
   @override
   void initState() {
     super.initState();
     _selectedDateTime = DateTime.now();
     _vendorSearchController = TextEditingController();
-    if (widget.initialItems.isNotEmpty) {
+
+    if (widget.isEditMode && widget.purchaseKey != null) {
+      // Load existing purchase data for editing
+      _loadExistingPurchase();
+    } else if (widget.initialItems.isNotEmpty) {
       _purchaseItems = widget.initialItems.map((item) {
         return PurchaseItem()
           ..itemNameController.text = item['itemName']?.toString() ?? ''
@@ -67,6 +104,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
       // Default to 3 empty items if not from purchase order
       _purchaseItems = List.generate(3, (index) => PurchaseItem());
     }
+
     // Initialize vendor data
     if (widget.initialVendorId != null && widget.initialVendorName != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -85,6 +123,46 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
     fetchVendors();
   }
 
+  Future<void> _loadExistingPurchase() async {
+    if (!widget.isEditMode || widget.purchaseKey == null) return;
+
+    final database = FirebaseDatabase.instance.ref();
+    final snapshot = await database.child('purchases').child(widget.purchaseKey!).get();
+
+    if (snapshot.exists) {
+      final purchaseData = snapshot.value as Map<dynamic, dynamic>;
+
+      if (mounted) {
+        setState(() {
+          // Load date/time
+          if (purchaseData['timestamp'] != null) {
+            _selectedDateTime = DateTime.parse(purchaseData['timestamp'].toString());
+          }
+
+          // Load vendor
+          if (purchaseData['vendorId'] != null && purchaseData['vendorName'] != null) {
+            _selectedVendor = {
+              'key': purchaseData['vendorId'].toString(),
+              'name': purchaseData['vendorName'].toString(),
+            };
+            _vendorSearchController.text = purchaseData['vendorName'].toString();
+          }
+
+          // Load items
+          final items = purchaseData['items'] as List<dynamic>?;
+          if (items != null) {
+            _purchaseItems = items.map((item) {
+              return PurchaseItem()
+                ..itemNameController.text = item['itemName']?.toString() ?? ''
+                ..quantityController.text = (item['quantity'] as num?)?.toString() ?? '0'
+                ..priceController.text = (item['purchasePrice'] as num?)?.toString() ?? '0';
+            }).toList();
+          }
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _vendorSearchController.dispose();
@@ -96,6 +174,264 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 
     super.dispose();
   }
+
+
+
+  Future<void> _updateInventoryQuantities(List<PurchaseItem> validItems, String purchaseId) async {
+    final database = FirebaseDatabase.instance.ref();
+
+    final componentConsumptionRef = database.child('componentConsumption').child(purchaseId);
+    Map<String, Map<String, dynamic>> missingComponents = {};
+
+    for (var purchaseItem in validItems) {
+      String itemName = purchaseItem.itemNameController.text;
+      double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
+
+      var existingItem = _items.firstWhere(
+            (inventoryItem) => inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
+        orElse: () => {},
+      );
+
+      if (existingItem.isNotEmpty) {
+        String itemKey = existingItem['key'];
+        double currentQty = existingItem['qtyOnHand']?.toDouble() ?? 0.0;
+        double purchasePrice = double.tryParse(purchaseItem.priceController.text) ?? 0.0;
+
+        // For edit mode, we already reverted the old quantities, so we can just add the new ones
+        // For create mode, we add the new quantities normally
+        await database.child('items').child(itemKey).update({
+          'qtyOnHand': currentQty + purchasedQty,
+          'costPrice': purchasePrice,
+        });
+
+        // Handle BOM components
+        if (existingItem['isBOM'] == true) {
+          dynamic componentsData = existingItem['components'];
+          Map<String, dynamic> components = {};
+
+          // Safely convert components data to a map
+          if (componentsData is Map) {
+            components = componentsData.cast<String, dynamic>();
+          } else if (componentsData is List) {
+            // Handle list format if needed
+            for (int i = 0; i < componentsData.length; i += 2) {
+              if (i + 1 < componentsData.length) {
+                components[componentsData[i].toString()] = componentsData[i + 1];
+              }
+            }
+          }
+
+          Map<String, dynamic> consumptionRecord = {
+            'bomItemName': itemName,
+            'bomItemKey': itemKey,
+            'quantityProduced': purchasedQty,
+            'timestamp': _selectedDateTime.toString(),
+            'components': {},
+          };
+
+          for (var componentEntry in components.entries) {
+            String componentName = componentEntry.key;
+            double qtyPerUnit = 0.0;
+
+            // Safely parse the quantity per unit
+            if (componentEntry.value is num) {
+              qtyPerUnit = (componentEntry.value as num).toDouble();
+            } else if (componentEntry.value is String) {
+              qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
+            }
+
+            double totalQtyRequired = qtyPerUnit * purchasedQty;
+
+            var componentItem = _items.firstWhere(
+                  (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
+              orElse: () => {},
+            );
+
+            if (componentItem.isNotEmpty) {
+              String componentKey = componentItem['key'];
+              double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
+
+              if (currentQty < totalQtyRequired) {
+                missingComponents[componentKey] = {
+                  'name': componentName,
+                  'requiredQty': totalQtyRequired,
+                  'availableQty': currentQty,
+                  'unit': componentItem['unit'] ?? '',
+                };
+              }
+
+              consumptionRecord['components'][componentName] = {
+                'required': totalQtyRequired,
+                'used': currentQty >= totalQtyRequired ? totalQtyRequired : currentQty,
+                'remaining': currentQty >= totalQtyRequired
+                    ? currentQty - totalQtyRequired
+                    : 0.0,
+              };
+            }
+          }
+
+          await componentConsumptionRef.set(consumptionRecord);
+        }
+      }
+    }
+
+    // Handle missing components dialog
+    if (missingComponents.isNotEmpty) {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+      bool proceed = await showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(languageProvider.isEnglish
+                ? 'Insufficient Components'
+                : 'اجزاء کی کمی'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView(
+                shrinkWrap: true,
+                children: missingComponents.values.map((comp) {
+                  return ListTile(
+                    title: Text('${comp['name']} (${comp['unit']})'),
+                    subtitle: Text(languageProvider.isEnglish
+                        ? 'Required: ${comp['requiredQty']}, Available: ${comp['availableQty']}'
+                        : 'درکار: ${comp['requiredQty']}, دستیاب: ${comp['availableQty']}'),
+                  );
+                }).toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(languageProvider.isEnglish ? 'Proceed Anyway' : 'پھر بھی جاری رکھیں'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!proceed) {
+        // If user cancels, revert the inventory updates
+        await _revertInventoryUpdates(validItems);
+        return;
+      }
+    }
+
+    // Deduct components (partial or full) and record consumption/wastage
+    for (var purchaseItem in validItems) {
+      String itemName = purchaseItem.itemNameController.text;
+      double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
+
+      var existingItem = _items.firstWhere(
+            (inventoryItem) => inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
+        orElse: () => {},
+      );
+
+      if (existingItem.isNotEmpty && existingItem['isBOM'] == true) {
+        dynamic componentsData = existingItem['components'];
+        Map<String, dynamic> components = {};
+
+        if (componentsData is Map) {
+          components = componentsData.cast<String, dynamic>();
+        } else if (componentsData is List) {
+          for (int i = 0; i < componentsData.length; i += 2) {
+            if (i + 1 < componentsData.length) {
+              components[componentsData[i].toString()] = componentsData[i + 1];
+            }
+          }
+        }
+
+        for (var componentEntry in components.entries) {
+          String componentName = componentEntry.key;
+          double qtyPerUnit = 0.0;
+
+          if (componentEntry.value is num) {
+            qtyPerUnit = (componentEntry.value as num).toDouble();
+          } else if (componentEntry.value is String) {
+            qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
+          }
+
+          double totalQtyRequired = qtyPerUnit * purchasedQty;
+
+          var componentItem = _items.firstWhere(
+                (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
+            orElse: () => {},
+          );
+
+          if (componentItem.isNotEmpty) {
+            String componentKey = componentItem['key'];
+            double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
+            double qtyToDeduct = currentQty < totalQtyRequired ? currentQty : totalQtyRequired;
+
+            await database.child('items').child(componentKey).update({
+              'qtyOnHand': currentQty - qtyToDeduct,
+            });
+
+            if (qtyToDeduct < totalQtyRequired) {
+              await database.child('wastage').push().set({
+                'itemName': componentName,
+                'quantity': totalQtyRequired - qtyToDeduct,
+                'date': DateTime.now().toString(),
+                'purchaseId': purchaseId,
+                'type': 'component_shortage',
+                'relatedBOM': itemName,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+// Helper method to revert inventory updates if user cancels due to insufficient components
+  Future<void> _revertInventoryUpdates(List<PurchaseItem> validItems) async {
+    final database = FirebaseDatabase.instance.ref();
+
+    for (var purchaseItem in validItems) {
+      String itemName = purchaseItem.itemNameController.text;
+      double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
+
+      var existingItem = _items.firstWhere(
+            (inventoryItem) => inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
+        orElse: () => {},
+      );
+
+      if (existingItem.isNotEmpty) {
+        String itemKey = existingItem['key'];
+        double currentQty = existingItem['qtyOnHand']?.toDouble() ?? 0.0;
+
+        // Revert the quantity by subtracting what we just added
+        await database.child('items').child(itemKey).update({
+          'qtyOnHand': currentQty - purchasedQty,
+        });
+      }
+    }
+
+    // Show cancellation message
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(languageProvider.isEnglish
+            ? 'Purchase cancelled due to insufficient components'
+            : 'اجزاء کی کمی کی وجہ سے خریداری منسوخ کر دی گئی')),
+      );
+    }
+
+    throw Exception('Purchase cancelled due to insufficient components');
+  }
+
+
+
+
+
+
+
+
+
 
 
   Future<Map<String, dynamic>?> fetchBomForItem(String itemName) async {
@@ -830,6 +1166,327 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
   }
 
 
+  // Future<void> savePurchase() async {
+  //   if (!mounted) return;
+  //
+  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //
+  //   if (_formKey.currentState!.validate()) {
+  //     if (_selectedVendor == null) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text(languageProvider.isEnglish
+  //             ? 'Please select a vendor'
+  //             : 'براہ کرم فروش منتخب کریں')),
+  //       );
+  //       return;
+  //     }
+  //
+  //     List<PurchaseItem> validItems = _purchaseItems.where((purchaseItem) =>
+  //     purchaseItem.itemNameController.text.isNotEmpty &&
+  //         purchaseItem.quantityController.text.isNotEmpty &&
+  //         purchaseItem.priceController.text.isNotEmpty).toList();
+  //
+  //     if (validItems.isEmpty) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text(languageProvider.isEnglish
+  //             ? 'Please add at least one item'
+  //             : 'براہ کرم کم از کم ایک آئٹم شامل کریں')),
+  //       );
+  //       return;
+  //     }
+  //
+  //     try {
+  //       final database = FirebaseDatabase.instance.ref();
+  //       String vendorKey = _selectedVendor!['key'];
+  //       _wastageRecords.clear();
+  //
+  //       final newPurchase = {
+  //         'items': validItems.map((purchaseItem) => {
+  //           'itemName': purchaseItem.itemNameController.text,
+  //           'quantity': double.tryParse(purchaseItem.quantityController.text) ?? 0.0,
+  //           'purchasePrice': double.tryParse(purchaseItem.priceController.text) ?? 0.0,
+  //           'total': (double.tryParse(purchaseItem.quantityController.text) ?? 0.0) *
+  //               (double.tryParse(purchaseItem.priceController.text) ?? 0.0),
+  //           'isBOM': _items.any((item) =>
+  //           item['itemName'].toLowerCase() ==
+  //               purchaseItem.itemNameController.text.toLowerCase() &&
+  //               item['isBOM'] == true),
+  //         }).toList(),
+  //         'vendorId': vendorKey,
+  //         'vendorName': _selectedVendor!['name'],
+  //         'grandTotal': calculateTotal(),
+  //         'timestamp': _selectedDateTime.toString(),
+  //         'type': 'credit',
+  //         'hasBOM': validItems.any((purchaseItem) =>
+  //             _items.any((inventoryItem) =>
+  //             inventoryItem['itemName'].toLowerCase() ==
+  //                 purchaseItem.itemNameController.text.toLowerCase() &&
+  //                 inventoryItem['isBOM'] == true)),
+  //       };
+  //
+  //       final purchaseRef = database.child('purchases').push();
+  //       final purchaseId = purchaseRef.key;
+  //       await purchaseRef.set(newPurchase);
+  //
+  //       final componentConsumptionRef = database.child('componentConsumption').child(purchaseId!);
+  //
+  //       Map<String, Map<String, dynamic>> missingComponents = {};
+  //
+  //       for (var purchaseItem in validItems) {
+  //         String itemName = purchaseItem.itemNameController.text;
+  //         double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
+  //
+  //         var existingItem = _items.firstWhere(
+  //               (inventoryItem) =>
+  //           inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
+  //           orElse: () => {},
+  //         );
+  //
+  //         if (existingItem.isNotEmpty) {
+  //           String itemKey = existingItem['key'];
+  //           double currentQty = existingItem['qtyOnHand']?.toDouble() ?? 0.0;
+  //           double purchasePrice = double.tryParse(purchaseItem.priceController.text) ?? 0.0;
+  //
+  //           await database.child('items').child(itemKey).update({
+  //             'qtyOnHand': currentQty + purchasedQty,
+  //             'costPrice': purchasePrice,
+  //           });
+  //
+  //           // Handle BOM components more safely
+  //           if (existingItem['isBOM'] == true) {
+  //             dynamic componentsData = existingItem['components'];
+  //             Map<String, dynamic> components = {};
+  //
+  //             // Safely convert components data to a map
+  //             if (componentsData is Map) {
+  //               components = componentsData.cast<String, dynamic>();
+  //             } else if (componentsData is List) {
+  //               // Handle list format if needed
+  //               for (int i = 0; i < componentsData.length; i += 2) {
+  //                 if (i + 1 < componentsData.length) {
+  //                   components[componentsData[i].toString()] = componentsData[i + 1];
+  //                 }
+  //               }
+  //             }
+  //
+  //             Map<String, dynamic> consumptionRecord = {
+  //               'bomItemName': itemName,
+  //               'bomItemKey': itemKey,
+  //               'quantityProduced': purchasedQty,
+  //               'timestamp': _selectedDateTime.toString(),
+  //               'components': {},
+  //             };
+  //
+  //             for (var componentEntry in components.entries) {
+  //               String componentName = componentEntry.key;
+  //               double qtyPerUnit = 0.0;
+  //
+  //               // Safely parse the quantity per unit
+  //               if (componentEntry.value is num) {
+  //                 qtyPerUnit = (componentEntry.value as num).toDouble();
+  //               } else if (componentEntry.value is String) {
+  //                 qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
+  //               }
+  //
+  //               double totalQtyRequired = qtyPerUnit * purchasedQty;
+  //
+  //               var componentItem = _items.firstWhere(
+  //                     (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
+  //                 orElse: () => {},
+  //               );
+  //
+  //               if (componentItem.isNotEmpty) {
+  //                 String componentKey = componentItem['key'];
+  //                 double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
+  //
+  //                 if (currentQty < totalQtyRequired) {
+  //                   missingComponents[componentKey] = {
+  //                     'name': componentName,
+  //                     'requiredQty': totalQtyRequired,
+  //                     'availableQty': currentQty,
+  //                     'unit': componentItem['unit'] ?? '',
+  //                   };
+  //                 }
+  //
+  //                 consumptionRecord['components'][componentName] = {
+  //                   'required': totalQtyRequired,
+  //                   'used': currentQty >= totalQtyRequired ? totalQtyRequired : currentQty,
+  //                   'remaining': currentQty >= totalQtyRequired
+  //                       ? currentQty - totalQtyRequired
+  //                       : 0.0,
+  //                 };
+  //               }
+  //             }
+  //
+  //             await componentConsumptionRef.set(consumptionRecord);
+  //           }
+  //         }
+  //       }
+  //
+  //       if (missingComponents.isNotEmpty) {
+  //         bool proceed = await showDialog(
+  //           context: context,
+  //           builder: (context) {
+  //             return AlertDialog(
+  //               title: Text(languageProvider.isEnglish
+  //                   ? 'Insufficient Components'
+  //                   : 'اجزاء کی کمی'),
+  //               content: SizedBox(
+  //                 width: double.maxFinite,
+  //                 child: ListView(
+  //                   shrinkWrap: true,
+  //                   children: missingComponents.values.map((comp) {
+  //                     return ListTile(
+  //                       title: Text('${comp['name']} (${comp['unit']})'),
+  //                       subtitle: Text(languageProvider.isEnglish
+  //                           ? 'Required: ${comp['requiredQty']}, Available: ${comp['availableQty']}'
+  //                           : 'درکار: ${comp['requiredQty']}, دستیاب: ${comp['availableQty']}'),
+  //                     );
+  //                   }).toList(),
+  //                 ),
+  //               ),
+  //               actions: [
+  //                 TextButton(
+  //                   onPressed: () => Navigator.of(context).pop(false),
+  //                   child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+  //                 ),
+  //                 ElevatedButton(
+  //                   onPressed: () => Navigator.of(context).pop(true),
+  //                   child: Text(languageProvider.isEnglish ? 'Proceed Anyway' : 'پھر بھی جاری رکھیں'),
+  //                 ),
+  //               ],
+  //             );
+  //           },
+  //         );
+  //
+  //         if (!proceed) return;
+  //       }
+  //
+  //       // Deduct components (partial or full) and record consumption/wastage
+  //       for (var purchaseItem in validItems) {
+  //         String itemName = purchaseItem.itemNameController.text;
+  //         double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
+  //
+  //         var existingItem = _items.firstWhere(
+  //               (inventoryItem) =>
+  //           inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
+  //           orElse: () => {},
+  //         );
+  //
+  //         if (existingItem.isNotEmpty && existingItem['isBOM'] == true) {
+  //           dynamic componentsData = existingItem['components'];
+  //           Map<String, dynamic> components = {};
+  //
+  //           if (componentsData is Map) {
+  //             components = componentsData.cast<String, dynamic>();
+  //           } else if (componentsData is List) {
+  //             for (int i = 0; i < componentsData.length; i += 2) {
+  //               if (i + 1 < componentsData.length) {
+  //                 components[componentsData[i].toString()] = componentsData[i + 1];
+  //               }
+  //             }
+  //           }
+  //
+  //           for (var componentEntry in components.entries) {
+  //             String componentName = componentEntry.key;
+  //             double qtyPerUnit = 0.0;
+  //
+  //             if (componentEntry.value is num) {
+  //               qtyPerUnit = (componentEntry.value as num).toDouble();
+  //             } else if (componentEntry.value is String) {
+  //               qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
+  //             }
+  //
+  //             double totalQtyRequired = qtyPerUnit * purchasedQty;
+  //
+  //             var componentItem = _items.firstWhere(
+  //                   (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
+  //               orElse: () => {},
+  //             );
+  //
+  //             if (componentItem.isNotEmpty) {
+  //               String componentKey = componentItem['key'];
+  //               double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
+  //               double qtyToDeduct = currentQty < totalQtyRequired ? currentQty : totalQtyRequired;
+  //
+  //               await database.child('items').child(componentKey).update({
+  //                 'qtyOnHand': currentQty - qtyToDeduct,
+  //               });
+  //
+  //               if (qtyToDeduct < totalQtyRequired) {
+  //                 await database.child('wastage').push().set({
+  //                   'itemName': componentName,
+  //                   'quantity': totalQtyRequired - qtyToDeduct,
+  //                   'date': DateTime.now().toString(),
+  //                   'purchaseId': purchaseId,
+  //                   'type': 'component_shortage',
+  //                   'relatedBOM': itemName,
+  //                 });
+  //               }
+  //             }
+  //           }
+  //         }
+  //       }
+  //
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text(languageProvider.isEnglish
+  //               ? 'Purchase recorded successfully!'
+  //               : 'خریداری کامیابی سے ریکارڈ ہو گئی!')),
+  //         );
+  //         _clearForm();
+  //       }
+  //     } catch (error) {
+  //       print('Purchase error: $error');
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text(languageProvider.isEnglish
+  //               ? 'Failed to record purchase: ${error.toString()}'
+  //               : 'خریداری ریکارڈ کرنے میں ناکامی: ${error.toString()}')),
+  //         );
+  //       }
+  //     }
+  //   }
+  // }
+
+  Future<void> _revertOldPurchaseQuantities() async {
+    if (!widget.isEditMode || widget.purchaseKey == null) return;
+
+    final database = FirebaseDatabase.instance.ref();
+
+    // Fetch the old purchase data to revert quantities
+    final oldPurchaseSnapshot = await database.child('purchases').child(widget.purchaseKey!).get();
+    if (!oldPurchaseSnapshot.exists) return;
+
+    final oldPurchaseData = oldPurchaseSnapshot.value as Map<dynamic, dynamic>;
+    final oldItems = oldPurchaseData['items'] as List<dynamic>?;
+
+    if (oldItems == null) return;
+
+    for (var oldItem in oldItems) {
+      final itemName = oldItem['itemName']?.toString() ?? '';
+      final oldQuantity = (oldItem['quantity'] as num?)?.toDouble() ?? 0.0;
+
+      if (itemName.isNotEmpty) {
+        var existingItem = _items.firstWhere(
+              (inventoryItem) => inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
+          orElse: () => {},
+        );
+
+        if (existingItem.isNotEmpty) {
+          String itemKey = existingItem['key'];
+          double currentQty = existingItem['qtyOnHand']?.toDouble() ?? 0.0;
+
+          // Revert the quantity by subtracting the old purchase quantity
+          await database.child('items').child(itemKey).update({
+            'qtyOnHand': currentQty - oldQuantity,
+          });
+        }
+      }
+    }
+  }
+
+
   Future<void> savePurchase() async {
     if (!mounted) return;
 
@@ -864,7 +1521,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         String vendorKey = _selectedVendor!['key'];
         _wastageRecords.clear();
 
-        final newPurchase = {
+        final purchaseData = {
           'items': validItems.map((purchaseItem) => {
             'itemName': purchaseItem.itemNameController.text,
             'quantity': double.tryParse(purchaseItem.quantityController.text) ?? 0.0,
@@ -888,231 +1545,66 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                   inventoryItem['isBOM'] == true)),
         };
 
-        final purchaseRef = database.child('purchases').push();
-        final purchaseId = purchaseRef.key;
-        await purchaseRef.set(newPurchase);
+        DatabaseReference purchaseRef;
+        String purchaseId;
 
-        final componentConsumptionRef = database.child('componentConsumption').child(purchaseId!);
+        if (widget.isEditMode && widget.purchaseKey != null) {
+          // EDIT MODE: Update existing purchase
+          purchaseId = widget.purchaseKey!;
+          purchaseRef = database.child('purchases').child(purchaseId);
 
-        Map<String, Map<String, dynamic>> missingComponents = {};
+          // First, revert the inventory quantities from the old purchase data
+          await _revertOldPurchaseQuantities();
 
-        for (var purchaseItem in validItems) {
-          String itemName = purchaseItem.itemNameController.text;
-          double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
-
-          var existingItem = _items.firstWhere(
-                (inventoryItem) =>
-            inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
-            orElse: () => {},
-          );
-
-          if (existingItem.isNotEmpty) {
-            String itemKey = existingItem['key'];
-            double currentQty = existingItem['qtyOnHand']?.toDouble() ?? 0.0;
-            double purchasePrice = double.tryParse(purchaseItem.priceController.text) ?? 0.0;
-
-            await database.child('items').child(itemKey).update({
-              'qtyOnHand': currentQty + purchasedQty,
-              'costPrice': purchasePrice,
-            });
-
-            // Handle BOM components more safely
-            if (existingItem['isBOM'] == true) {
-              dynamic componentsData = existingItem['components'];
-              Map<String, dynamic> components = {};
-
-              // Safely convert components data to a map
-              if (componentsData is Map) {
-                components = componentsData.cast<String, dynamic>();
-              } else if (componentsData is List) {
-                // Handle list format if needed
-                for (int i = 0; i < componentsData.length; i += 2) {
-                  if (i + 1 < componentsData.length) {
-                    components[componentsData[i].toString()] = componentsData[i + 1];
-                  }
-                }
-              }
-
-              Map<String, dynamic> consumptionRecord = {
-                'bomItemName': itemName,
-                'bomItemKey': itemKey,
-                'quantityProduced': purchasedQty,
-                'timestamp': _selectedDateTime.toString(),
-                'components': {},
-              };
-
-              for (var componentEntry in components.entries) {
-                String componentName = componentEntry.key;
-                double qtyPerUnit = 0.0;
-
-                // Safely parse the quantity per unit
-                if (componentEntry.value is num) {
-                  qtyPerUnit = (componentEntry.value as num).toDouble();
-                } else if (componentEntry.value is String) {
-                  qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
-                }
-
-                double totalQtyRequired = qtyPerUnit * purchasedQty;
-
-                var componentItem = _items.firstWhere(
-                      (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
-                  orElse: () => {},
-                );
-
-                if (componentItem.isNotEmpty) {
-                  String componentKey = componentItem['key'];
-                  double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
-
-                  if (currentQty < totalQtyRequired) {
-                    missingComponents[componentKey] = {
-                      'name': componentName,
-                      'requiredQty': totalQtyRequired,
-                      'availableQty': currentQty,
-                      'unit': componentItem['unit'] ?? '',
-                    };
-                  }
-
-                  consumptionRecord['components'][componentName] = {
-                    'required': totalQtyRequired,
-                    'used': currentQty >= totalQtyRequired ? totalQtyRequired : currentQty,
-                    'remaining': currentQty >= totalQtyRequired
-                        ? currentQty - totalQtyRequired
-                        : 0.0,
-                  };
-                }
-              }
-
-              await componentConsumptionRef.set(consumptionRecord);
-            }
-          }
+          // Then update the purchase record
+          await purchaseRef.update(purchaseData);
+        } else {
+          // CREATE MODE: Create new purchase
+          purchaseRef = database.child('purchases').push();
+          purchaseId = purchaseRef.key!;
+          await purchaseRef.set(purchaseData);
         }
 
-        if (missingComponents.isNotEmpty) {
-          bool proceed = await showDialog(
-            context: context,
-            builder: (context) {
-              return AlertDialog(
-                title: Text(languageProvider.isEnglish
-                    ? 'Insufficient Components'
-                    : 'اجزاء کی کمی'),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: missingComponents.values.map((comp) {
-                      return ListTile(
-                        title: Text('${comp['name']} (${comp['unit']})'),
-                        subtitle: Text(languageProvider.isEnglish
-                            ? 'Required: ${comp['requiredQty']}, Available: ${comp['availableQty']}'
-                            : 'درکار: ${comp['requiredQty']}, دستیاب: ${comp['availableQty']}'),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: Text(languageProvider.isEnglish ? 'Proceed Anyway' : 'پھر بھی جاری رکھیں'),
-                  ),
-                ],
-              );
-            },
-          );
-
-          if (!proceed) return;
-        }
-
-        // Deduct components (partial or full) and record consumption/wastage
-        for (var purchaseItem in validItems) {
-          String itemName = purchaseItem.itemNameController.text;
-          double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
-
-          var existingItem = _items.firstWhere(
-                (inventoryItem) =>
-            inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
-            orElse: () => {},
-          );
-
-          if (existingItem.isNotEmpty && existingItem['isBOM'] == true) {
-            dynamic componentsData = existingItem['components'];
-            Map<String, dynamic> components = {};
-
-            if (componentsData is Map) {
-              components = componentsData.cast<String, dynamic>();
-            } else if (componentsData is List) {
-              for (int i = 0; i < componentsData.length; i += 2) {
-                if (i + 1 < componentsData.length) {
-                  components[componentsData[i].toString()] = componentsData[i + 1];
-                }
-              }
-            }
-
-            for (var componentEntry in components.entries) {
-              String componentName = componentEntry.key;
-              double qtyPerUnit = 0.0;
-
-              if (componentEntry.value is num) {
-                qtyPerUnit = (componentEntry.value as num).toDouble();
-              } else if (componentEntry.value is String) {
-                qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
-              }
-
-              double totalQtyRequired = qtyPerUnit * purchasedQty;
-
-              var componentItem = _items.firstWhere(
-                    (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
-                orElse: () => {},
-              );
-
-              if (componentItem.isNotEmpty) {
-                String componentKey = componentItem['key'];
-                double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
-                double qtyToDeduct = currentQty < totalQtyRequired ? currentQty : totalQtyRequired;
-
-                await database.child('items').child(componentKey).update({
-                  'qtyOnHand': currentQty - qtyToDeduct,
-                });
-
-                if (qtyToDeduct < totalQtyRequired) {
-                  await database.child('wastage').push().set({
-                    'itemName': componentName,
-                    'quantity': totalQtyRequired - qtyToDeduct,
-                    'date': DateTime.now().toString(),
-                    'purchaseId': purchaseId,
-                    'type': 'component_shortage',
-                    'relatedBOM': itemName,
-                  });
-                }
-              }
-            }
-          }
-        }
+        // Update inventory quantities with new purchase data
+        await _updateInventoryQuantities(validItems, purchaseId);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(languageProvider.isEnglish
-                ? 'Purchase recorded successfully!'
+                ? widget.isEditMode
+                ? 'Purchase updated successfully!'
+                : 'Purchase recorded successfully!'
+                : widget.isEditMode
+                ? 'خریداری کامیابی سے اپ ڈیٹ ہو گئی!'
                 : 'خریداری کامیابی سے ریکارڈ ہو گئی!')),
           );
-          _clearForm();
+
+          if (!widget.isEditMode) {
+            _clearForm();
+          } else {
+            // If in edit mode, pop back to previous screen
+            Navigator.of(context).pop();
+          }
         }
       } catch (error) {
+        // Check if it's a cancellation due to insufficient components
+        if (error.toString().contains('cancelled due to insufficient components')) {
+          // This is expected when user cancels due to insufficient components
+          // Don't show error message as it's already shown in the helper method
+          return;
+        }
+
         print('Purchase error: $error');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(languageProvider.isEnglish
-                ? 'Failed to record purchase: ${error.toString()}'
-                : 'خریداری ریکارڈ کرنے میں ناکامی: ${error.toString()}')),
+                ? 'Failed to ${widget.isEditMode ? 'update' : 'record'} purchase: ${error.toString()}'
+                : 'خریداری ${widget.isEditMode ? 'اپ ڈیٹ' : 'ریکارڈ'} کرنے میں ناکامی: ${error.toString()}')),
           );
         }
       }
     }
   }
-
 
   Future<List<Map<String, dynamic>>> getComponentConsumptionHistory(String bomItemKey) async {
     final database = FirebaseDatabase.instance.ref();

@@ -40,9 +40,6 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
 
-  // void _logout(BuildContext context){
-  //   Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context)=>LoginPage()  ), (Route<dynamic>route)=>false);
-  // }
   void _logout(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signOut();
