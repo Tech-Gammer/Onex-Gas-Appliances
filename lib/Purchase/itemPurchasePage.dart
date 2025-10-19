@@ -51,39 +51,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
   Map<String, double> _wastageRecords = {};
 
 
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   _selectedDateTime = DateTime.now();
-  //   _vendorSearchController = TextEditingController();
-  //   if (widget.initialItems.isNotEmpty) {
-  //     _purchaseItems = widget.initialItems.map((item) {
-  //       return PurchaseItem()
-  //         ..itemNameController.text = item['itemName']?.toString() ?? ''
-  //         ..quantityController.text = (item['quantity'] as num?)?.toString() ?? '0'
-  //         ..priceController.text = (item['purchasePrice'] as num?)?.toString() ?? '0';
-  //     }).toList();
-  //   } else {
-  //     // Default to 3 empty items if not from purchase order
-  //     _purchaseItems = List.generate(3, (index) => PurchaseItem());
-  //   }
-  //   // Initialize vendor data
-  //   if (widget.initialVendorId != null && widget.initialVendorName != null) {
-  //     WidgetsBinding.instance.addPostFrameCallback((_) {
-  //       if (mounted) {
-  //         setState(() {
-  //           _selectedVendor = {
-  //             'key': widget.initialVendorId,
-  //             'name': widget.initialVendorName,
-  //           };
-  //           _vendorSearchController.text = widget.initialVendorName!;
-  //         });
-  //       }
-  //     });
-  //   }
-  //   fetchItems();
-  //   fetchVendors();
-  // }
   @override
   void initState() {
     super.initState();
@@ -98,6 +65,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         return PurchaseItem()
           ..itemNameController.text = item['itemName']?.toString() ?? ''
           ..quantityController.text = (item['quantity'] as num?)?.toString() ?? '0'
+          ..weightController.text = (item['weight'] as num?)?.toString() ?? '0' // NEW: Add weight
           ..priceController.text = (item['purchasePrice'] as num?)?.toString() ?? '0';
       }).toList();
     } else {
@@ -148,14 +116,25 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
             _vendorSearchController.text = purchaseData['vendorName'].toString();
           }
 
-          // Load items
+          // Load items with backward compatibility for weight
           final items = purchaseData['items'] as List<dynamic>?;
           if (items != null) {
             _purchaseItems = items.map((item) {
+              final itemMap = Map<String, dynamic>.from(item as Map<dynamic, dynamic>);
+
+              // Handle backward compatibility - if weight doesn't exist, set it to 0
+              double weight = 0.0;
+              if (itemMap['weight'] != null) {
+                weight = (itemMap['weight'] as num).toDouble();
+              }
+              // If weight doesn't exist in old data, leave it as 0.0
+              // Don't copy quantity to weight
+
               return PurchaseItem()
-                ..itemNameController.text = item['itemName']?.toString() ?? ''
-                ..quantityController.text = (item['quantity'] as num?)?.toString() ?? '0'
-                ..priceController.text = (item['purchasePrice'] as num?)?.toString() ?? '0';
+                ..itemNameController.text = itemMap['itemName']?.toString() ?? ''
+                ..quantityController.text = (itemMap['quantity'] as num?)?.toString() ?? '0'
+                ..weightController.text = weight.toString() // Use 0 for old purchases without weight
+                ..priceController.text = (itemMap['purchasePrice'] as num?)?.toString() ?? '0';
             }).toList();
           }
         });
@@ -174,8 +153,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 
     super.dispose();
   }
-
-
 
   Future<void> _updateInventoryQuantities(List<PurchaseItem> validItems, String purchaseId) async {
     final database = FirebaseDatabase.instance.ref();
@@ -424,16 +401,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
     throw Exception('Purchase cancelled due to insufficient components');
   }
 
-
-
-
-
-
-
-
-
-
-
   Future<Map<String, dynamic>?> fetchBomForItem(String itemName) async {
     final item = _items.firstWhere(
           (item) => item['itemName'].toLowerCase() == itemName.toLowerCase(),
@@ -596,9 +563,9 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
   double calculateTotal() {
     double total = 0.0;
     for (var item in _purchaseItems) {
-      final quantity = double.tryParse(item.quantityController.text) ?? 0.0;
+      final weight = double.tryParse(item.weightController.text) ?? 0.0;
       final price = double.tryParse(item.priceController.text) ?? 0.0;
-      total += quantity * price;
+      total += weight * price; // CHANGED: Use weight × price instead of quantity × price
     }
     return total;
   }
@@ -626,7 +593,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
       }
     });
   }
-
 
   Widget tableHeader(String text) => Padding(
     padding: const EdgeInsets.all(8.0),
@@ -698,6 +664,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                   languageProvider.isEnglish ? 'No.' : 'نمبر',
                   languageProvider.isEnglish ? 'Item Name' : 'آئٹم کا نام',
                   languageProvider.isEnglish ? 'Qty' : 'مقدار',
+                  languageProvider.isEnglish ? 'Weight' : 'وزن', // NEW: Add weight header
                   languageProvider.isEnglish ? 'Price' : 'قیمت',
                   languageProvider.isEnglish ? 'Total' : 'کل',
                 ],
@@ -706,13 +673,15 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                     item.quantityController.text.isNotEmpty &&
                     item.priceController.text.isNotEmpty).map((item) {
                   final quantity = double.tryParse(item.quantityController.text) ?? 0.0;
+                  final weight = double.tryParse(item.weightController.text) ?? 0.0; // Default to 0 if empty
                   final price = double.tryParse(item.priceController.text) ?? 0.0;
-                  final itemTotal = quantity * price;
+                  final itemTotal = weight * price; // Use weight × price
 
                   return [
                     '${_purchaseItems.indexOf(item) + 1}',
                     item.itemNameController.text,
                     quantity.toStringAsFixed(2),
+                    weight.toStringAsFixed(2),
                     price.toStringAsFixed(2),
                     itemTotal.toStringAsFixed(2),
                   ];
@@ -900,37 +869,40 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                             columnWidths: const {
                               0: FixedColumnWidth(40),
                               1: FlexColumnWidth(2),
-                              2: FlexColumnWidth(1.5),
-                              3: FlexColumnWidth(1.5),
-                              4: FixedColumnWidth(40),
+                              2: FlexColumnWidth(1),
+                              3: FlexColumnWidth(1), // Weight column
+                              4: FlexColumnWidth(1), // Price column
+                              5: FixedColumnWidth(40), // Delete column
                             },
                             border: TableBorder.all(color: Colors.orange.shade100, width: 1),
                             children: [
-                              // Header
+                              // Header - 6 columns
                               TableRow(
                                 decoration: BoxDecoration(color: Colors.orange.shade50),
                                 children: [
                                   tableHeader('No.'),
                                   tableHeader(languageProvider.isEnglish ? 'Item Name' : 'آئٹم کا نام'),
                                   tableHeader(languageProvider.isEnglish ? 'Qty' : 'مقدار'),
+                                  tableHeader(languageProvider.isEnglish ? 'Weight' : 'وزن'),
                                   tableHeader(languageProvider.isEnglish ? 'Price' : 'قیمت'),
-                                  SizedBox(),
+                                  SizedBox(), // Delete column header
                                 ],
                               ),
 
-                              // Item Rows
+                              // Item Rows - 6 columns
                               ..._purchaseItems.asMap().entries.map((entry) {
                                 final index = entry.key;
                                 final item = entry.value;
 
                                 return TableRow(
                                   children: [
+                                    // Column 1: Number
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
                                       child: Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
                                     ),
 
-                                    // Autocomplete Item Name
+                                    // Column 2: Item Name (Autocomplete)
                                     Padding(
                                       padding: const EdgeInsets.all(6.0),
                                       child: Autocomplete<Map<String, dynamic>>(
@@ -972,7 +944,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                                       ),
                                     ),
 
-                                    // Quantity Field
+                                    // Column 3: Quantity
                                     Padding(
                                       padding: const EdgeInsets.all(6.0),
                                       child: TextFormField(
@@ -987,7 +959,23 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                                       ),
                                     ),
 
-                                    // Price Field
+                                    // Column 4: Weight
+                                    Padding(
+                                      padding: const EdgeInsets.all(6.0),
+                                      child: TextFormField(
+                                        controller: item.weightController,
+                                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                        onChanged: (_) => setState(() {}),
+                                        decoration: InputDecoration(
+                                          isDense: true,
+                                          border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                          hintText: languageProvider.isEnglish ? 'Weight' : 'وزن',
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Column 5: Price
                                     Padding(
                                       padding: const EdgeInsets.all(6.0),
                                       child: TextFormField(
@@ -998,11 +986,12 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                                           isDense: true,
                                           border: OutlineInputBorder(),
                                           contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                          hintText: 'Price',
                                         ),
                                       ),
                                     ),
 
-                                    // Delete Icon
+                                    // Column 6: Delete Icon
                                     Center(
                                       child: IconButton(
                                         icon: const Icon(Icons.remove_circle, color: Colors.red, size: 20),
@@ -1138,7 +1127,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         final item = itemEntry.value;
         if (item['itemName'] == itemName && item['isBOM'] == true) {
           final components = item['components'];
-
           if (components is List) {
             // Handle list format with component objects
             final componentMap = <String, Map<String, dynamic>>{};
@@ -1164,290 +1152,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 
     return {};
   }
-
-
-  // Future<void> savePurchase() async {
-  //   if (!mounted) return;
-  //
-  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  //
-  //   if (_formKey.currentState!.validate()) {
-  //     if (_selectedVendor == null) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text(languageProvider.isEnglish
-  //             ? 'Please select a vendor'
-  //             : 'براہ کرم فروش منتخب کریں')),
-  //       );
-  //       return;
-  //     }
-  //
-  //     List<PurchaseItem> validItems = _purchaseItems.where((purchaseItem) =>
-  //     purchaseItem.itemNameController.text.isNotEmpty &&
-  //         purchaseItem.quantityController.text.isNotEmpty &&
-  //         purchaseItem.priceController.text.isNotEmpty).toList();
-  //
-  //     if (validItems.isEmpty) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text(languageProvider.isEnglish
-  //             ? 'Please add at least one item'
-  //             : 'براہ کرم کم از کم ایک آئٹم شامل کریں')),
-  //       );
-  //       return;
-  //     }
-  //
-  //     try {
-  //       final database = FirebaseDatabase.instance.ref();
-  //       String vendorKey = _selectedVendor!['key'];
-  //       _wastageRecords.clear();
-  //
-  //       final newPurchase = {
-  //         'items': validItems.map((purchaseItem) => {
-  //           'itemName': purchaseItem.itemNameController.text,
-  //           'quantity': double.tryParse(purchaseItem.quantityController.text) ?? 0.0,
-  //           'purchasePrice': double.tryParse(purchaseItem.priceController.text) ?? 0.0,
-  //           'total': (double.tryParse(purchaseItem.quantityController.text) ?? 0.0) *
-  //               (double.tryParse(purchaseItem.priceController.text) ?? 0.0),
-  //           'isBOM': _items.any((item) =>
-  //           item['itemName'].toLowerCase() ==
-  //               purchaseItem.itemNameController.text.toLowerCase() &&
-  //               item['isBOM'] == true),
-  //         }).toList(),
-  //         'vendorId': vendorKey,
-  //         'vendorName': _selectedVendor!['name'],
-  //         'grandTotal': calculateTotal(),
-  //         'timestamp': _selectedDateTime.toString(),
-  //         'type': 'credit',
-  //         'hasBOM': validItems.any((purchaseItem) =>
-  //             _items.any((inventoryItem) =>
-  //             inventoryItem['itemName'].toLowerCase() ==
-  //                 purchaseItem.itemNameController.text.toLowerCase() &&
-  //                 inventoryItem['isBOM'] == true)),
-  //       };
-  //
-  //       final purchaseRef = database.child('purchases').push();
-  //       final purchaseId = purchaseRef.key;
-  //       await purchaseRef.set(newPurchase);
-  //
-  //       final componentConsumptionRef = database.child('componentConsumption').child(purchaseId!);
-  //
-  //       Map<String, Map<String, dynamic>> missingComponents = {};
-  //
-  //       for (var purchaseItem in validItems) {
-  //         String itemName = purchaseItem.itemNameController.text;
-  //         double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
-  //
-  //         var existingItem = _items.firstWhere(
-  //               (inventoryItem) =>
-  //           inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
-  //           orElse: () => {},
-  //         );
-  //
-  //         if (existingItem.isNotEmpty) {
-  //           String itemKey = existingItem['key'];
-  //           double currentQty = existingItem['qtyOnHand']?.toDouble() ?? 0.0;
-  //           double purchasePrice = double.tryParse(purchaseItem.priceController.text) ?? 0.0;
-  //
-  //           await database.child('items').child(itemKey).update({
-  //             'qtyOnHand': currentQty + purchasedQty,
-  //             'costPrice': purchasePrice,
-  //           });
-  //
-  //           // Handle BOM components more safely
-  //           if (existingItem['isBOM'] == true) {
-  //             dynamic componentsData = existingItem['components'];
-  //             Map<String, dynamic> components = {};
-  //
-  //             // Safely convert components data to a map
-  //             if (componentsData is Map) {
-  //               components = componentsData.cast<String, dynamic>();
-  //             } else if (componentsData is List) {
-  //               // Handle list format if needed
-  //               for (int i = 0; i < componentsData.length; i += 2) {
-  //                 if (i + 1 < componentsData.length) {
-  //                   components[componentsData[i].toString()] = componentsData[i + 1];
-  //                 }
-  //               }
-  //             }
-  //
-  //             Map<String, dynamic> consumptionRecord = {
-  //               'bomItemName': itemName,
-  //               'bomItemKey': itemKey,
-  //               'quantityProduced': purchasedQty,
-  //               'timestamp': _selectedDateTime.toString(),
-  //               'components': {},
-  //             };
-  //
-  //             for (var componentEntry in components.entries) {
-  //               String componentName = componentEntry.key;
-  //               double qtyPerUnit = 0.0;
-  //
-  //               // Safely parse the quantity per unit
-  //               if (componentEntry.value is num) {
-  //                 qtyPerUnit = (componentEntry.value as num).toDouble();
-  //               } else if (componentEntry.value is String) {
-  //                 qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
-  //               }
-  //
-  //               double totalQtyRequired = qtyPerUnit * purchasedQty;
-  //
-  //               var componentItem = _items.firstWhere(
-  //                     (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
-  //                 orElse: () => {},
-  //               );
-  //
-  //               if (componentItem.isNotEmpty) {
-  //                 String componentKey = componentItem['key'];
-  //                 double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
-  //
-  //                 if (currentQty < totalQtyRequired) {
-  //                   missingComponents[componentKey] = {
-  //                     'name': componentName,
-  //                     'requiredQty': totalQtyRequired,
-  //                     'availableQty': currentQty,
-  //                     'unit': componentItem['unit'] ?? '',
-  //                   };
-  //                 }
-  //
-  //                 consumptionRecord['components'][componentName] = {
-  //                   'required': totalQtyRequired,
-  //                   'used': currentQty >= totalQtyRequired ? totalQtyRequired : currentQty,
-  //                   'remaining': currentQty >= totalQtyRequired
-  //                       ? currentQty - totalQtyRequired
-  //                       : 0.0,
-  //                 };
-  //               }
-  //             }
-  //
-  //             await componentConsumptionRef.set(consumptionRecord);
-  //           }
-  //         }
-  //       }
-  //
-  //       if (missingComponents.isNotEmpty) {
-  //         bool proceed = await showDialog(
-  //           context: context,
-  //           builder: (context) {
-  //             return AlertDialog(
-  //               title: Text(languageProvider.isEnglish
-  //                   ? 'Insufficient Components'
-  //                   : 'اجزاء کی کمی'),
-  //               content: SizedBox(
-  //                 width: double.maxFinite,
-  //                 child: ListView(
-  //                   shrinkWrap: true,
-  //                   children: missingComponents.values.map((comp) {
-  //                     return ListTile(
-  //                       title: Text('${comp['name']} (${comp['unit']})'),
-  //                       subtitle: Text(languageProvider.isEnglish
-  //                           ? 'Required: ${comp['requiredQty']}, Available: ${comp['availableQty']}'
-  //                           : 'درکار: ${comp['requiredQty']}, دستیاب: ${comp['availableQty']}'),
-  //                     );
-  //                   }).toList(),
-  //                 ),
-  //               ),
-  //               actions: [
-  //                 TextButton(
-  //                   onPressed: () => Navigator.of(context).pop(false),
-  //                   child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
-  //                 ),
-  //                 ElevatedButton(
-  //                   onPressed: () => Navigator.of(context).pop(true),
-  //                   child: Text(languageProvider.isEnglish ? 'Proceed Anyway' : 'پھر بھی جاری رکھیں'),
-  //                 ),
-  //               ],
-  //             );
-  //           },
-  //         );
-  //
-  //         if (!proceed) return;
-  //       }
-  //
-  //       // Deduct components (partial or full) and record consumption/wastage
-  //       for (var purchaseItem in validItems) {
-  //         String itemName = purchaseItem.itemNameController.text;
-  //         double purchasedQty = double.tryParse(purchaseItem.quantityController.text) ?? 0.0;
-  //
-  //         var existingItem = _items.firstWhere(
-  //               (inventoryItem) =>
-  //           inventoryItem['itemName'].toLowerCase() == itemName.toLowerCase(),
-  //           orElse: () => {},
-  //         );
-  //
-  //         if (existingItem.isNotEmpty && existingItem['isBOM'] == true) {
-  //           dynamic componentsData = existingItem['components'];
-  //           Map<String, dynamic> components = {};
-  //
-  //           if (componentsData is Map) {
-  //             components = componentsData.cast<String, dynamic>();
-  //           } else if (componentsData is List) {
-  //             for (int i = 0; i < componentsData.length; i += 2) {
-  //               if (i + 1 < componentsData.length) {
-  //                 components[componentsData[i].toString()] = componentsData[i + 1];
-  //               }
-  //             }
-  //           }
-  //
-  //           for (var componentEntry in components.entries) {
-  //             String componentName = componentEntry.key;
-  //             double qtyPerUnit = 0.0;
-  //
-  //             if (componentEntry.value is num) {
-  //               qtyPerUnit = (componentEntry.value as num).toDouble();
-  //             } else if (componentEntry.value is String) {
-  //               qtyPerUnit = double.tryParse(componentEntry.value as String) ?? 0.0;
-  //             }
-  //
-  //             double totalQtyRequired = qtyPerUnit * purchasedQty;
-  //
-  //             var componentItem = _items.firstWhere(
-  //                   (item) => item['itemName'].toLowerCase() == componentName.toLowerCase(),
-  //               orElse: () => {},
-  //             );
-  //
-  //             if (componentItem.isNotEmpty) {
-  //               String componentKey = componentItem['key'];
-  //               double currentQty = componentItem['qtyOnHand']?.toDouble() ?? 0.0;
-  //               double qtyToDeduct = currentQty < totalQtyRequired ? currentQty : totalQtyRequired;
-  //
-  //               await database.child('items').child(componentKey).update({
-  //                 'qtyOnHand': currentQty - qtyToDeduct,
-  //               });
-  //
-  //               if (qtyToDeduct < totalQtyRequired) {
-  //                 await database.child('wastage').push().set({
-  //                   'itemName': componentName,
-  //                   'quantity': totalQtyRequired - qtyToDeduct,
-  //                   'date': DateTime.now().toString(),
-  //                   'purchaseId': purchaseId,
-  //                   'type': 'component_shortage',
-  //                   'relatedBOM': itemName,
-  //                 });
-  //               }
-  //             }
-  //           }
-  //         }
-  //       }
-  //
-  //       if (mounted) {
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(content: Text(languageProvider.isEnglish
-  //               ? 'Purchase recorded successfully!'
-  //               : 'خریداری کامیابی سے ریکارڈ ہو گئی!')),
-  //         );
-  //         _clearForm();
-  //       }
-  //     } catch (error) {
-  //       print('Purchase error: $error');
-  //       if (mounted) {
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(content: Text(languageProvider.isEnglish
-  //               ? 'Failed to record purchase: ${error.toString()}'
-  //               : 'خریداری ریکارڈ کرنے میں ناکامی: ${error.toString()}')),
-  //         );
-  //       }
-  //     }
-  //   }
-  // }
 
   Future<void> _revertOldPurchaseQuantities() async {
     if (!widget.isEditMode || widget.purchaseKey == null) return;
@@ -1486,7 +1190,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
     }
   }
 
-
   Future<void> savePurchase() async {
     if (!mounted) return;
 
@@ -1524,9 +1227,10 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         final purchaseData = {
           'items': validItems.map((purchaseItem) => {
             'itemName': purchaseItem.itemNameController.text,
+            'weight': double.tryParse(purchaseItem.weightController.text) ?? 0.0, // NEW: Add weight
             'quantity': double.tryParse(purchaseItem.quantityController.text) ?? 0.0,
             'purchasePrice': double.tryParse(purchaseItem.priceController.text) ?? 0.0,
-            'total': (double.tryParse(purchaseItem.quantityController.text) ?? 0.0) *
+            'total': (double.tryParse(purchaseItem.weightController.text) ?? 0.0) * // CHANGED: Use weight
                 (double.tryParse(purchaseItem.priceController.text) ?? 0.0),
             'isBOM': _items.any((item) =>
             item['itemName'].toLowerCase() ==
@@ -1806,20 +1510,22 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 class PurchaseItem {
   late TextEditingController itemNameController;
   late TextEditingController quantityController;
+  late TextEditingController weightController; // NEW: Add weight controller
   late TextEditingController priceController;
   Map<String, dynamic>? selectedItem;
 
   PurchaseItem() {
     itemNameController = TextEditingController();
     quantityController = TextEditingController();
+    weightController = TextEditingController(); // NEW: Initialize weight controller
     priceController = TextEditingController();
-    selectedItem = null; // Explicitly initialize
-
+    selectedItem = null;
   }
 
   void dispose() {
     itemNameController.dispose();
     quantityController.dispose();
+    weightController.dispose(); // NEW: Dispose weight controller
     priceController.dispose();
   }
 }

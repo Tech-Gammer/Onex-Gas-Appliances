@@ -136,6 +136,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
             purchases.add(purchaseData);
 
             // Store purchase items for expansion
+            // In the _fetchLedgerData method, update the item processing:
             if (purchaseValue['items'] != null) {
               List<Map<String, dynamic>> itemsList = [];
 
@@ -147,8 +148,9 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                   return {
                     'itemName': itemData['itemName'] ?? 'Unknown Item',
                     'quantity': (itemData['quantity'] ?? 0).toDouble(),
+                    'weight': (itemData['weight'] ?? 0).toDouble(), // Add weight
                     'price': (itemData['purchasePrice'] ?? itemData['price'] ?? 0.0).toDouble(),
-                    'total': (itemData['total'] ?? ((itemData['quantity'] ?? 0) * (itemData['purchasePrice'] ?? itemData['price'] ?? 0.0))).toDouble(),
+                    'total': (itemData['total'] ?? ((itemData['weight'] ?? 0) * (itemData['purchasePrice'] ?? itemData['price'] ?? 0.0))).toDouble(),
                   };
                 }).toList();
               } else if (purchaseValue['items'] is List) {
@@ -159,13 +161,15 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                     return {
                       'itemName': item['itemName'] ?? 'Unknown Item',
                       'quantity': (item['quantity'] ?? 0).toDouble(),
+                      'weight': (item['weight'] ?? 0).toDouble(), // Add weight
                       'price': (item['purchasePrice'] ?? item['price'] ?? 0.0).toDouble(),
-                      'total': (item['total'] ?? ((item['quantity'] ?? 0) * (item['purchasePrice'] ?? item['price'] ?? 0.0))).toDouble(),
+                      'total': (item['total'] ?? ((item['weight'] ?? 0) * (item['purchasePrice'] ?? item['price'] ?? 0.0))).toDouble(),
                     };
                   }
                   return {
                     'itemName': 'Unknown Item',
                     'quantity': 0.0,
+                    'weight': 0.0, // Add weight
                     'price': 0.0,
                     'total': 0.0,
                   };
@@ -401,15 +405,17 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
   Widget _buildEnhancedDesktopPurchaseTable(List<Map<String, dynamic>> purchaseItems) {
     // Calculate total quantity
     double totalQuantity = purchaseItems.fold(0.0, (sum, item) => sum + (item['quantity'] ?? 0));
+    // Calculate total weight
+    double totalWeight = purchaseItems.fold(0.0, (sum, item) => sum + (item['weight'] ?? 0));
     // Calculate total amount
     double totalAmount = purchaseItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0));
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Container(
-        constraints: BoxConstraints(minWidth: 600),
+        constraints: BoxConstraints(minWidth: 700), // Increased width for new column
         child: DataTable(
-          columnSpacing: 24,
+          columnSpacing: 20,
           dataRowHeight: 50,
           headingRowHeight: 48,
           headingRowColor: MaterialStateProperty.all(Color(0xFFF5F5F5)),
@@ -430,7 +436,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
           columns: [
             DataColumn(
               label: Container(
-                width: 250,
+                width: 200,
                 child: Text(
                   'Item Name',
                   style: TextStyle(fontWeight: FontWeight.bold),
@@ -438,7 +444,11 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
               ),
             ),
             DataColumn(
-              label: Text('Quantity'),
+              label: Text('Qty'),
+              numeric: true,
+            ),
+            DataColumn(
+              label: Text('Weight'),
               numeric: true,
             ),
             DataColumn(
@@ -457,7 +467,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                 cells: [
                   DataCell(
                     Container(
-                      width: 250,
+                      width: 200,
                       child: Text(
                         item['itemName']?.toString() ?? '-',
                         overflow: TextOverflow.ellipsis,
@@ -474,7 +484,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        item['quantity']?.toString() ?? '0',
+                        (item['quantity'] ?? 0).toStringAsFixed(2),
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: Colors.blue[800],
@@ -483,8 +493,24 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                     ),
                   ),
                   DataCell(
+                    Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.purple[50],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        (item['weight'] ?? 0).toStringAsFixed(2),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.purple[800],
+                        ),
+                      ),
+                    ),
+                  ),
+                  DataCell(
                     Text(
-                      'Rs ${(item['price'] ?? 0).toStringAsFixed(2)}',
+                      'Rs ${(item['price'] ?? item['purchasePrice'] ?? 0).toStringAsFixed(2)}',
                       style: TextStyle(
                         color: Colors.grey[700],
                         fontWeight: FontWeight.w500,
@@ -517,7 +543,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
               cells: [
                 DataCell(
                   Container(
-                    width: 250,
+                    width: 200,
                     child: Text(
                       'TOTAL',
                       style: TextStyle(
@@ -541,6 +567,24 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.blue[900],
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple[100],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.purple[300]!),
+                    ),
+                    child: Text(
+                      totalWeight.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.purple[900],
                         fontSize: 13,
                       ),
                     ),
@@ -646,6 +690,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
           ),
 
           // Updated table with payment method, bank, and quantity columns
+          // In the PDF table headers, update the column structure:
           pw.Table(
             columnWidths: {
               0: const pw.FlexColumnWidth(1.2), // Date
@@ -653,9 +698,10 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
               2: const pw.FlexColumnWidth(1),    // Method
               3: const pw.FlexColumnWidth(1.5),  // Bank
               4: const pw.FlexColumnWidth(1),    // Quantity
-              5: const pw.FlexColumnWidth(1.2),  // Credit
-              6: const pw.FlexColumnWidth(1.2),  // Debit
-              7: const pw.FlexColumnWidth(1.5),  // Balance
+              5: const pw.FlexColumnWidth(1),    // Weight
+              6: const pw.FlexColumnWidth(1.2),  // Credit
+              7: const pw.FlexColumnWidth(1.2),  // Debit
+              8: const pw.FlexColumnWidth(1.5),  // Balance
             },
             border: pw.TableBorder.all(),
             children: [
@@ -668,6 +714,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                   _buildPdfHeaderCell('Method'),
                   _buildPdfHeaderCell('Bank'),
                   _buildPdfHeaderCell('Qty'),
+                  _buildPdfHeaderCell('Weight'),
                   _buildPdfHeaderCell('Credit (Rs)'),
                   _buildPdfHeaderCell('Debit (Rs)'),
                   _buildPdfHeaderCell('Balance (Rs)'),
@@ -685,11 +732,13 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                     ? entry['date']
                     : _getFormattedDate(_getDisplayDate(entry));
 
-                // Calculate total quantity for purchases
+                // Calculate total quantity and weight for purchases
                 double totalQuantity = 0.0;
+                double totalWeight = 0.0;
                 if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
                   final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
                   totalQuantity = purchaseItems.fold(0.0, (sum, item) => sum + (item['quantity'] ?? 0));
+                  totalWeight = purchaseItems.fold(0.0, (sum, item) => sum + (item['weight'] ?? 0));
                 }
 
                 // Main row
@@ -714,6 +763,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                       )
                           : _buildPdfCell('-'),
                       _buildPdfCell(isPurchase ? totalQuantity.toStringAsFixed(2) : '-'),
+                      _buildPdfCell(isPurchase ? totalWeight.toStringAsFixed(2) : '-'),
                       _buildPdfCell(entry['credit'].toStringAsFixed(2)),
                       _buildPdfCell(entry['debit'].toStringAsFixed(2)),
                       _buildPdfCell(entry['balance'].toStringAsFixed(2)),
@@ -733,6 +783,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                           _buildPdfCell('', isHeader: true),
                           _buildPdfCell('Item Name', isHeader: true),
                           _buildPdfCell('Qty', isHeader: true),
+                          _buildPdfCell('Weight', isHeader: true),
                           _buildPdfCell('Price', isHeader: true),
                           _buildPdfCell('Total', isHeader: true),
                           _buildPdfCell('', isHeader: true),
@@ -749,9 +800,10 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                           children: [
                             _buildPdfCell(''),
                             _buildPdfCell(item['itemName']),
-                            _buildPdfCell(item['quantity'].toString()),
-                            _buildPdfCell(item['price'].toStringAsFixed(2)),
-                            _buildPdfCell(item['total'].toStringAsFixed(2)),
+                            _buildPdfCell((item['quantity'] ?? 0).toStringAsFixed(2)),
+                            _buildPdfCell((item['weight'] ?? 0).toStringAsFixed(2)),
+                            _buildPdfCell((item['price'] ?? item['purchasePrice'] ?? 0).toStringAsFixed(2)),
+                            _buildPdfCell((item['total'] ?? 0).toStringAsFixed(2)),
                             _buildPdfCell(''),
                             _buildPdfCell(''),
                             _buildPdfCell(''),
@@ -760,7 +812,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                       );
                     }
 
-                    // Add purchase summary with total quantity
+                    // Add purchase summary with total quantity and weight
                     final totalAmount = purchaseItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0));
 
                     rows.add(
@@ -769,6 +821,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                         children: [
                           _buildPdfCell('', isHeader: true),
                           _buildPdfCell('Purchase Summary:', isHeader: true),
+                          _buildPdfCell('', isHeader: true),
                           _buildPdfCell('', isHeader: true),
                           _buildPdfCell('', isHeader: true),
                           _buildPdfCell('', isHeader: true),
@@ -791,6 +844,24 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                           _buildPdfCell(''),
                           _buildPdfCell(''),
                           _buildPdfCell(''),
+                          _buildPdfCell(''),
+                        ],
+                      ),
+                    );
+
+                    // Total Weight row
+                    rows.add(
+                      pw.TableRow(
+                        children: [
+                          _buildPdfCell(''),
+                          _buildPdfCell('Total Weight:'),
+                          _buildPdfCell(''),
+                          _buildPdfCell(totalWeight.toStringAsFixed(2), isHeader: true),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
                         ],
                       ),
                     );
@@ -801,6 +872,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                         children: [
                           _buildPdfCell(''),
                           _buildPdfCell('Grand Total:'),
+                          _buildPdfCell(''),
                           _buildPdfCell(''),
                           _buildPdfCell(''),
                           _buildPdfCell(entry['grandTotal']?.toStringAsFixed(2) ?? '0.00', isHeader: true),
@@ -816,7 +888,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                 return rows;
               }).toList(),
 
-              // Total row - Calculate overall total quantity
+              // Total row - Calculate overall total quantity and weight
               pw.TableRow(
                 children: [
                   _buildPdfCell('Total', isHeader: true),
@@ -824,6 +896,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                   _buildPdfCell(''),
                   _buildPdfCell(''),
                   _buildPdfCell(_calculateTotalQuantity().toStringAsFixed(2), isHeader: true),
+                  _buildPdfCell(_calculateTotalWeight().toStringAsFixed(2), isHeader: true),
                   _buildPdfCell(_totalCredit.toStringAsFixed(2), isHeader: true),
                   _buildPdfCell(_totalDebit.toStringAsFixed(2), isHeader: true),
                   _buildPdfCell(_currentBalance.toStringAsFixed(2), isHeader: true),
@@ -869,6 +942,20 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     await Printing.layoutPdf(onLayout: (format) => pdf.save());
   }
 
+  // Helper method to calculate total weight across all purchases
+  double _calculateTotalWeight() {
+    double totalWeight = 0.0;
+
+    for (final entry in _filteredLedgerEntries) {
+      if (entry['description'] == 'Purchase' && _isPurchaseExpanded(entry['purchaseId'])) {
+        final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
+        totalWeight += purchaseItems.fold(0.0, (sum, item) => sum + (item['weight'] ?? 0));
+      }
+    }
+
+    return totalWeight;
+  }
+
 // Helper method to calculate total quantity across all purchases
   double _calculateTotalQuantity() {
     double totalQuantity = 0.0;
@@ -881,233 +968,6 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     }
 
     return totalQuantity;
-  }
-
-  Future<void> _shareLedger() async {
-    final pdf = pw.Document();
-
-    // Load the logo image
-    final logoImage = await rootBundle.load('assets/images/logo.png');
-    final logo = pw.MemoryImage(logoImage.buffer.asUint8List());
-
-    String _getFormattedDate(String dateString) {
-      final DateTime? parsedDate = DateTime.tryParse(dateString);
-      return parsedDate != null
-          ? "${parsedDate.month}/${parsedDate.day}/${parsedDate.year % 100}"
-          : "Unknown Date";
-    }
-
-    // Load bank logos
-    Map<String, pw.MemoryImage> bankLogoImages = {};
-    for (var bank in pakistaniBanks) {
-      try {
-        final logoBytes = await rootBundle.load(bank.iconPath);
-        final logoBuffer = logoBytes.buffer.asUint8List();
-        bankLogoImages[bank.name.toLowerCase()] = pw.MemoryImage(logoBuffer);
-      } catch (e) {
-        print('Error loading bank logo: ${bank.iconPath} - $e');
-      }
-    }
-
-    // Generate PDF
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) => [
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              pw.Image(logo, width: 80, height: 80),
-              pw.SizedBox(height: 10),
-              pw.Text(
-                'Alsaeed Sweets & Bakers',
-                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 5),
-              pw.Text(
-                'Vendor: ${widget.vendorName}',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-              ),
-              if (_selectedDateRange != null)
-                pw.Text(
-                  'Date Range: ${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}/${_selectedDateRange!.start.year} - '
-                      '${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}/${_selectedDateRange!.end.year}',
-                  style: const pw.TextStyle(fontSize: 12),
-                ),
-              pw.SizedBox(height: 20),
-            ],
-          ),
-
-          // Updated table with payment method and bank columns
-          pw.Table(
-            columnWidths: {
-              0: const pw.FlexColumnWidth(1.2), // Date
-              1: const pw.FlexColumnWidth(2),    // Description
-              2: const pw.FlexColumnWidth(1),    // Method
-              3: const pw.FlexColumnWidth(1.5),  // Bank
-              4: const pw.FlexColumnWidth(1.2),  // Credit
-              5: const pw.FlexColumnWidth(1.2),  // Debit
-              6: const pw.FlexColumnWidth(1.5),  // Balance
-            },
-            border: pw.TableBorder.all(),
-            children: [
-              // Header row
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                children: [
-                  _buildPdfHeaderCell('Date'),
-                  _buildPdfHeaderCell('Description'),
-                  _buildPdfHeaderCell('Method'),
-                  _buildPdfHeaderCell('Bank'),
-                  _buildPdfHeaderCell('Credit (Rs)'),
-                  _buildPdfHeaderCell('Debit (Rs)'),
-                  _buildPdfHeaderCell('Balance (Rs)'),
-                ],
-              ),
-              // Data rows
-              ..._filteredLedgerEntries.expand((entry) {
-                final List<pw.TableRow> rows = [];
-                final bankName = _getBankName(entry);
-                final bankLogo = bankName != null ? bankLogoImages[bankName.toLowerCase()] : null;
-                final isPayment = entry['description'].toString().contains('Payment');
-                final isPurchase = entry['description'].toString().contains('Purchase');
-                final displayDate = entry['description'] == 'Opening Balance'
-                    ? entry['date']
-                    : _getFormattedDate(_getDisplayDate(entry));
-
-                // Main row
-                rows.add(
-                  pw.TableRow(
-                    children: [
-                      _buildPdfCell(displayDate),
-                      _buildPdfCell(entry['description']),
-                      _buildPdfCell(isPayment ? (entry['method'] ?? '-') : '-'),
-                      isPayment
-                          ? pw.Row(
-                        children: [
-                          if (bankLogo != null)
-                            pw.Container(
-                              width: 20,
-                              height: 20,
-                              margin: const pw.EdgeInsets.only(right: 4),
-                              child: pw.Image(bankLogo),
-                            ),
-                          pw.Text(bankName ?? '-', style: const pw.TextStyle(fontSize: 9)),
-                        ],
-                      )
-                          : _buildPdfCell('-'),
-                      _buildPdfCell(entry['credit'].toStringAsFixed(2)),
-                      _buildPdfCell(entry['debit'].toStringAsFixed(2)),
-                      _buildPdfCell(entry['balance'].toStringAsFixed(2)),
-                    ],
-                  ),
-                );
-
-                // Add purchase details if expanded
-                if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
-                  final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
-                  if (purchaseItems.isNotEmpty) {
-                    // Add header for purchase details
-                    rows.add(
-                      pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                        children: [
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('Item Name', isHeader: true),
-                          _buildPdfCell('Qty', isHeader: true),
-                          _buildPdfCell('Price', isHeader: true),
-                          _buildPdfCell('Total', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                        ],
-                      ),
-                    );
-
-                    // Add purchase items
-                    for (final item in purchaseItems) {
-                      rows.add(
-                        pw.TableRow(
-                          children: [
-                            _buildPdfCell(''),
-                            _buildPdfCell(item['itemName']),
-                            _buildPdfCell(item['quantity'].toString()),
-                            _buildPdfCell(item['price'].toStringAsFixed(2)),
-                            _buildPdfCell(item['total'].toStringAsFixed(2)),
-                            _buildPdfCell(''),
-                            _buildPdfCell(''),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // Add purchase summary
-                    rows.add(
-                      pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfColors.grey50),
-                        children: [
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('Purchase Total:', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                        ],
-                      ),
-                    );
-                    rows.add(
-                      pw.TableRow(
-                        children: [
-                          _buildPdfCell(''),
-                          _buildPdfCell('Grand Total:'),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(entry['grandTotal']?.toStringAsFixed(2) ?? '0.00', isHeader: true),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                        ],
-                      ),
-                    );
-                  }
-                }
-
-                return rows;
-              }).toList(),
-              // Total row
-              pw.TableRow(
-                children: [
-                  _buildPdfCell('Total', isHeader: true),
-                  _buildPdfCell(''),
-                  _buildPdfCell(''),
-                  _buildPdfCell(''),
-                  _buildPdfCell(_totalCredit.toStringAsFixed(2), isHeader: true),
-                  _buildPdfCell(_totalDebit.toStringAsFixed(2), isHeader: true),
-                  _buildPdfCell(_currentBalance.toStringAsFixed(2), isHeader: true),
-                ],
-              ),
-            ],
-          ),
-
-          pw.Container(
-            alignment: pw.Alignment.centerRight,
-            margin: const pw.EdgeInsets.only(top: 10),
-            child: pw.Text(
-              'Printed on: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-              style: const pw.TextStyle(fontSize: 10),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    // Save PDF to temporary directory
-    final output = await getTemporaryDirectory();
-    final file = File('${output.path}/ledger_${widget.vendorName}.pdf');
-    await file.writeAsBytes(await pdf.save());
-
-    // Share the PDF
-    await Share.shareXFiles([XFile(file.path)], text: 'Vendor Ledger for ${widget.vendorName}');
   }
 
   pw.Widget _buildPdfHeaderCell(String text) {
@@ -1170,10 +1030,6 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
           IconButton(
             icon: const Icon(Icons.print, color: Colors.white),
             onPressed: _printLedger,
-          ),
-          IconButton(
-            icon: const Icon(Icons.share, color: Colors.white),
-            onPressed: _shareLedger,
           ),
         ],
       ),
@@ -1361,175 +1217,13 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     );
   }
 
-  Widget _buildExpandedHeaderCell(String text, double flexValue) {
-    return Expanded(
-      flex: (flexValue * 10).round(),
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          border: Border(right: BorderSide(color: Colors.grey[300]!)),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color(0xFFE65100),
-            fontSize: 12,
-          ),
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExpandedTransactionRow(
-      Map<String, dynamic> entry,
-      bool isOpeningBalance,
-      bool isPurchase,
-      )
-  {
-    final dateText = isOpeningBalance
-        ? entry['date']
-        : _getFormattedDate(_getDisplayDate(entry), false);
-
-    final bankName = _getBankName(entry);
-    final bankLogoPath = _getBankLogoPath(bankName);
-    final isExpanded = isPurchase && _isPurchaseExpanded(entry['purchaseId']);
-
-    return GestureDetector(
-      onTap: isPurchase ? () {
-        _togglePurchaseExpansion(entry['purchaseId']);
-      } : null,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isOpeningBalance
-              ? Colors.yellow[100]
-              : (isPurchase && isExpanded
-              ? Color(0xFFFFB74D).withOpacity(0.1)
-              : Colors.white),
-          border: Border(
-            bottom: BorderSide(color: Colors.grey[300]!),
-            left: BorderSide(color: Colors.grey[300]!),
-            right: BorderSide(color: Colors.grey[300]!),
-          ),
-        ),
-        child: Row(
-          children: [
-            _buildExpandedDataCell(dateText, 1, false),
-            _buildExpandedDataCell(
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  if (isPurchase)
-                    IconButton(
-                      icon: Icon(
-                        isExpanded ? Icons.expand_less : Icons.expand_more,
-                        size: 16,
-                        color: Color(0xFFE65100),
-                      ),
-                      onPressed: () => _togglePurchaseExpansion(entry['purchaseId']),
-                    ),
-                  Expanded(
-                    child: Text(
-                      entry['description'],
-                      style: TextStyle(
-                        fontWeight: isOpeningBalance ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              2,
-              false,
-            ),
-            _buildExpandedDataCell(entry['method'] ?? '-', 1, false),
-            _buildExpandedDataCell(
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (bankLogoPath != null) ...[
-                    Image.asset(bankLogoPath, width: 24, height: 24),
-                    SizedBox(width: 4),
-                  ],
-                  Flexible(
-                    child: Text(
-                      bankName ?? '-',
-                      style: TextStyle(fontSize: 12),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              1.5,
-              false,
-            ),
-            _buildExpandedDataCell(
-              entry['credit'] > 0 ? 'Rs ${entry['credit'].toStringAsFixed(2)}' : '-',
-              1,
-              false,
-              textColor: entry['credit'] > 0 ? Colors.green : Colors.grey,
-            ),
-            _buildExpandedDataCell(
-              entry['debit'] > 0 ? 'Rs ${entry['debit'].toStringAsFixed(2)}' : '-',
-              1,
-              false,
-              textColor: entry['debit'] > 0 ? Colors.red : Colors.grey,
-            ),
-            _buildExpandedDataCell(
-              'Rs ${entry['balance'].toStringAsFixed(2)}',
-              1,
-              false,
-              fontWeight: FontWeight.bold,
-              textColor: Colors.blue,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExpandedDataCell(
-      dynamic content,
-      double flexValue,
-      bool isMobile, {
-        Color? textColor,
-        FontWeight? fontWeight,
-      })
-  {
-    return Expanded(
-      flex: (flexValue * 10).round(),
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          border: Border(right: BorderSide(color: Colors.grey[300]!)),
-        ),
-        child: content is Widget
-            ? content
-            : Text(
-          content.toString(),
-          style: TextStyle(
-            fontSize: 12,
-            color: textColor ?? Colors.black87,
-            fontWeight: fontWeight,
-          ),
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-
-
   Widget _buildDesktopLedgerView() {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     return Column(
       children: [
         // Enhanced Table Header
+        // In _buildDesktopLedgerView, update the header to include weight:
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -1555,6 +1249,8 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
               _buildEnhancedHeaderCell('Description', 2.5),
               _buildEnhancedHeaderCell('Method', 1.2),
               _buildEnhancedHeaderCell('Bank', 2),
+              _buildEnhancedHeaderCell('Qty', 1),
+              _buildEnhancedHeaderCell('Weight', 1),
               _buildEnhancedHeaderCell('Credit (Rs)', 1.3),
               _buildEnhancedHeaderCell('Debit (Rs)', 1.3),
               _buildEnhancedHeaderCell('Balance (Rs)', 1.5),
@@ -1677,7 +1373,6 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
       ],
     );
   }
-
 
   Widget _buildEnhancedHeaderCell(String text, double flexValue) {
     return Expanded(
@@ -1873,8 +1568,6 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
       ),
     );
   }
-
-
 
   Widget _buildSummaryCards() {
     final bool isMobile = MediaQuery.of(context).size.width < 600;
