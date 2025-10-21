@@ -44,6 +44,485 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     _fetchLedgerData();
   }
 
+
+
+
+
+
+
+  Future<void> _printLedger() async {
+    try {
+      final pdf = pw.Document();
+
+      // Load the logo image
+      final logoImage = await rootBundle.load('assets/images/logo.png');
+      final logo = pw.MemoryImage(logoImage.buffer.asUint8List());
+
+      // Load bank logos
+      Map<String, pw.MemoryImage> bankLogoImages = {};
+      for (var bank in pakistaniBanks) {
+        try {
+          final logoBytes = await rootBundle.load(bank.iconPath);
+          final logoBuffer = logoBytes.buffer.asUint8List();
+          bankLogoImages[bank.name.toLowerCase()] = pw.MemoryImage(logoBuffer);
+        } catch (e) {
+          print('Error loading bank logo: ${bank.iconPath} - $e');
+        }
+      }
+
+      // Calculate totals for PDF
+      double totalDebit = 0.0;
+      double totalCredit = 0.0;
+      double finalBalance = 0.0;
+      double totalQuantity = 0.0;
+      double totalWeight = 0.0;
+
+      for (var entry in _filteredLedgerEntries) {
+        totalDebit += (entry['debit'] ?? 0).toDouble();
+        totalCredit += (entry['credit'] ?? 0).toDouble();
+        finalBalance = (entry['balance'] ?? 0).toDouble(); // This will be the last balance
+
+        // Calculate quantity and weight for purchases
+        if (entry['description'] == 'Purchase' && _isPurchaseExpanded(entry['purchaseId'])) {
+          final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
+          totalQuantity += purchaseItems.fold(0.0, (sum, item) => sum + (item['quantity'] ?? 0));
+          totalWeight += purchaseItems.fold(0.0, (sum, item) => sum + (item['weight'] ?? 0));
+        }
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Header(
+                  level: 0,
+                  child: pw.Row(
+                      children: [
+                        pw.Image(logo, width: 200, height: 150),
+                        pw.Spacer(),
+                        pw.Text(
+                          'Vendor Ledger',
+                          style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                        ),
+                      ]
+                  )
+              ),
+              pw.SizedBox(height: 8),
+
+              // Vendor Info and Date Range
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Vendor: ${widget.vendorName}',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Contact: M. Hamza - 0335-4393403'),
+                      ],
+                    ),
+                  ),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        if (_selectedDateRange != null)
+                          pw.Text(
+                              'Date Range: ${DateFormat('dd MMM yy').format(_selectedDateRange!.start)} - ${DateFormat('dd MMM yy').format(_selectedDateRange!.end)}'
+                          ),
+                        pw.Text('Generated: ${DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now())}'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.Header(
+                level: 1,
+                child: pw.Text('Transaction Details'),
+              ),
+
+              // Ledger Table
+              _buildPDFLedgerTable(bankLogoImages, totalDebit, totalCredit, finalBalance, totalQuantity, totalWeight),
+            ];
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(onLayout: (format) => pdf.save());
+    } catch (e) {
+      print('Error generating PDF: $e');
+      // You might want to show a snackbar here
+    }
+  }
+
+  pw.Widget _buildPDFLedgerTable(
+      Map<String, pw.MemoryImage> bankLogoImages,
+      double totalDebit,
+      double totalCredit,
+      double finalBalance,
+      double totalQuantity,
+      double totalWeight
+      ) {
+    List<pw.Widget> rows = [];
+
+    // Helper method to format date
+    String _getFormattedDate(String dateString, bool isOpeningBalance) {
+      if (isOpeningBalance) {
+        return dateString;
+      }
+      final DateTime? parsedDate = DateTime.tryParse(dateString);
+      if (parsedDate != null) {
+        return DateFormat('dd MMM yyyy').format(parsedDate);
+      }
+      return "Unknown Date";
+    }
+
+    // Table header
+    rows.add(
+      pw.Container(
+        decoration: pw.BoxDecoration(color: PdfColors.grey200),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _buildPdfHeaderCell('Date', 60),
+            _buildPdfHeaderCell('Description', 80),
+            _buildPdfHeaderCell('Type', 50),
+            _buildPdfHeaderCell('Payment Method', 60),
+            _buildPdfHeaderCell('Bank', 70),
+            _buildPdfHeaderCell('Qty', 40),
+            _buildPdfHeaderCell('Weight', 50),
+            _buildPdfHeaderCell('Debit', 50),
+            _buildPdfHeaderCell('Credit', 50),
+            _buildPdfHeaderCell('Balance', 60),
+          ],
+        ),
+      ),
+    );
+
+    // Sort entries by date
+    List<Map<String, dynamic>> sortedEntries = List.from(_filteredLedgerEntries);
+    sortedEntries.sort((a, b) {
+      final dateA = DateTime.tryParse(_getDisplayDate(a)) ?? DateTime(2000);
+      final dateB = DateTime.tryParse(_getDisplayDate(b)) ?? DateTime(2000);
+      return dateA.compareTo(dateB);
+    });
+
+    // Add ledger entries
+    for (var entry in sortedEntries) {
+      final isOpeningBalance = entry['description'] == 'Opening Balance';
+      final isPayment = entry['description'].toString().contains('Payment');
+      final isPurchase = entry['description'].toString().contains('Purchase');
+
+      final displayDate = _getFormattedDate(_getDisplayDate(entry), isOpeningBalance);
+      final description = entry['description'].toString();
+
+      final type = isPurchase ? 'Purchase' : (isPayment ? 'Payment' : 'Balance');
+      final paymentMethod = isPayment ? (entry['method'] ?? '-') : '-';
+      final bankName = _getBankName(entry);
+      final bankLogo = bankName != null ? bankLogoImages[bankName.toLowerCase()] : null;
+
+      // Calculate quantity and weight for purchases
+      double quantity = 0.0;
+      double weight = 0.0;
+      if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
+        final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
+        quantity = purchaseItems.fold(0.0, (sum, item) => sum + (item['quantity'] ?? 0));
+        weight = purchaseItems.fold(0.0, (sum, item) => sum + (item['weight'] ?? 0));
+      }
+
+      final debit = (entry['debit'] ?? 0).toDouble();
+      final credit = (entry['credit'] ?? 0).toDouble();
+      final balance = (entry['balance'] ?? 0).toDouble();
+
+      // Main transaction row
+      rows.add(
+        pw.Container(
+          padding: const pw.EdgeInsets.all(6),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+            ),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              _buildPdfDataCell(displayDate, 60),
+              _buildPdfDataCell(description, 80),
+              _buildPdfDataCell(type, 50),
+              _buildPdfDataCell(paymentMethod, 60),
+              _buildBankCell(bankName, bankLogo, 70),
+              _buildPdfDataCell(isPurchase ? quantity.toStringAsFixed(2) : '-', 40),
+              _buildPdfDataCell(isPurchase ? weight.toStringAsFixed(2) : '-', 50),
+              _buildPdfDataCell(
+                debit > 0 ? 'Rs ${debit.toStringAsFixed(2)}' : '-',
+                50,
+                textColor: debit > 0 ? PdfColors.red : PdfColors.black,
+              ),
+              _buildPdfDataCell(
+                credit > 0 ? 'Rs ${credit.toStringAsFixed(2)}' : '-',
+                50,
+                textColor: credit > 0 ? PdfColors.green800 : PdfColors.black,
+              ),
+              _buildPdfDataCell(
+                'Rs ${balance.toStringAsFixed(2)}',
+                60,
+                fontWeight: pw.FontWeight.bold,
+                textColor: PdfColors.blue800,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      // Add purchase details if expanded
+      if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
+        final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
+        if (purchaseItems.isNotEmpty) {
+          rows.add(
+            pw.Container(
+              margin: const pw.EdgeInsets.only(left: 20, top: 4, bottom: 4),
+              padding: const pw.EdgeInsets.all(6),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                borderRadius: pw.BorderRadius.circular(4),
+                color: PdfColors.grey100,
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    "Purchase Items",
+                    style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Table(
+                    border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.3),
+                    columnWidths: {
+                      0: const pw.FlexColumnWidth(3),
+                      1: const pw.FlexColumnWidth(1),
+                      2: const pw.FlexColumnWidth(1),
+                      3: const pw.FlexColumnWidth(1),
+                      4: const pw.FlexColumnWidth(1),
+                    },
+                    children: [
+                      pw.TableRow(
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text("Item", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text("Qty", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text("Weight", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text("Rate", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text("Total", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      ...purchaseItems.map<pw.TableRow>((item) {
+                        return pw.TableRow(
+                          children: [
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(3),
+                              child: pw.Text(item['itemName']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 11)),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(3),
+                              child: pw.Text("${(item['quantity'] ?? 0).toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 11), textAlign: pw.TextAlign.right),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(3),
+                              child: pw.Text("${(item['weight'] ?? 0).toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 11), textAlign: pw.TextAlign.right),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(3),
+                              child: pw.Text("Rs ${(item['price'] ?? item['purchasePrice'] ?? 0).toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 11)),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(3),
+                              child: pw.Text(
+                                "Rs ${(item['total'] ?? 0).toStringAsFixed(2)}",
+                                style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
+                      // Purchase Grand Total Row
+                      pw.TableRow(
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text("Grand Total", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ),
+                          pw.SizedBox(),
+                          pw.SizedBox(),
+                          pw.SizedBox(),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text(
+                              "Rs ${(entry['grandTotal'] ?? credit).toStringAsFixed(2)}",
+                              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    // Add summary row
+    rows.add(
+      pw.Container(
+        padding: const pw.EdgeInsets.all(6),
+        decoration: pw.BoxDecoration(
+          border: const pw.Border(
+            top: pw.BorderSide(color: PdfColors.orange, width: 1.5),
+          ),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _buildPdfDataCell('TOTALS', 60, fontWeight: pw.FontWeight.bold),
+            _buildPdfDataCell('', 80),
+            _buildPdfDataCell('', 50),
+            _buildPdfDataCell('', 60),
+            _buildPdfDataCell('', 70),
+            _buildPdfDataCell(totalQuantity.toStringAsFixed(2), 40, fontWeight: pw.FontWeight.bold),
+            _buildPdfDataCell(totalWeight.toStringAsFixed(2), 50, fontWeight: pw.FontWeight.bold),
+            _buildPdfDataCell(
+              'Rs ${totalDebit.toStringAsFixed(2)}',
+              50,
+              fontWeight: pw.FontWeight.bold,
+              textColor: PdfColors.red,
+            ),
+            _buildPdfDataCell(
+              'Rs ${totalCredit.toStringAsFixed(2)}',
+              50,
+              fontWeight: pw.FontWeight.bold,
+              textColor: PdfColors.green800,
+            ),
+            _buildPdfDataCell(
+              'Rs ${finalBalance.toStringAsFixed(2)}',
+              60,
+              fontWeight: pw.FontWeight.bold,
+              textColor: finalBalance > 0 ? PdfColors.green : PdfColors.red,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return pw.Column(children: rows);
+  }
+
+  pw.Widget _buildBankCell(String? bankName, pw.MemoryImage? bankLogo, double width) {
+    return pw.Container(
+      width: width,
+      padding: const pw.EdgeInsets.all(6),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(right: pw.BorderSide(color: PdfColors.grey300)),
+      ),
+      child: bankName != null && bankLogo != null
+          ? pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.center,
+        children: [
+          pw.Container(
+            width: 15,
+            height: 15,
+            margin: const pw.EdgeInsets.only(right: 4),
+            child: pw.Image(bankLogo),
+          ),
+          pw.Expanded(
+            child: pw.Text(
+              bankName,
+              style: const pw.TextStyle(fontSize: 8),
+              textAlign: pw.TextAlign.center,
+              maxLines: 2,
+            ),
+          ),
+        ],
+      )
+          : pw.Text(
+        bankName ?? '-',
+        style: const pw.TextStyle(fontSize: 8),
+        textAlign: pw.TextAlign.center,
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfHeaderCell(String text, double width) {
+    return pw.Container(
+      width: width,
+      padding: const pw.EdgeInsets.all(6),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(right: pw.BorderSide(color: PdfColors.grey300)),
+      ),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.orange800,
+          fontSize: 9,
+        ),
+        textAlign: pw.TextAlign.center,
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfDataCell(
+      String text,
+      double width, {
+        PdfColor? textColor,
+        pw.FontWeight? fontWeight,
+      }) {
+    return pw.Container(
+      width: width,
+      padding: const pw.EdgeInsets.all(6),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(right: pw.BorderSide(color: PdfColors.grey300)),
+      ),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 8,
+          color: textColor ?? PdfColors.black,
+          fontWeight: fontWeight,
+        ),
+        textAlign: pw.TextAlign.center,
+        maxLines: 2,
+      ),
+    );
+  }
+
+
+
+
+
+
+
+
   static final Map<String, String> _bankIconMap = _createBankIconMap();
 
   static Map<String, String> _createBankIconMap() {
@@ -625,322 +1104,322 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     );
   }
 
-  Future<void> _printLedger() async {
-    final pdf = pw.Document();
-
-    // Load the logo image
-    final logoImage = await rootBundle.load('assets/images/logo.png');
-    final logo = pw.MemoryImage(logoImage.buffer.asUint8List());
-
-    // Load the footer logo if different
-    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
-    final footerBuffer = footerBytes.buffer.asUint8List();
-    final footerLogo = pw.MemoryImage(footerBuffer);
-
-    // Helper method to format the date
-    String _getFormattedDate(String dateString) {
-      final DateTime? parsedDate = DateTime.tryParse(dateString);
-      return parsedDate != null
-          ? "${parsedDate.month}/${parsedDate.day}/${parsedDate.year % 100}"
-          : "Unknown Date";
-    }
-
-    // Load bank logos
-    Map<String, pw.MemoryImage> bankLogoImages = {};
-    for (var bank in pakistaniBanks) {
-      try {
-        final logoBytes = await rootBundle.load(bank.iconPath);
-        final logoBuffer = logoBytes.buffer.asUint8List();
-        bankLogoImages[bank.name.toLowerCase()] = pw.MemoryImage(logoBuffer);
-      } catch (e) {
-        print('Error loading bank logo: ${bank.iconPath} - $e');
-      }
-    }
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) => [
-          pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.center,
-              children: [
-                pw.Header(
-                  level: 0,
-                  child: pw.Column(
-                    children: [
-                      pw.Image(logo, width: 120, height: 120),
-                      pw.Text(
-                        'M. Hamza: 0335-4393403',
-                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-                      ),
-                      pw.SizedBox(height: 5),
-                      pw.Text('Vendor: ${widget.vendorName}',
-                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                      if (_selectedDateRange != null)
-                        pw.Text(
-                          'Date Range: ${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}/${_selectedDateRange!.start.year} - '
-                              '${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}/${_selectedDateRange!.end.year}',
-                          style: const pw.TextStyle(fontSize: 12),
-                        ),
-                    ],
-                  ),
-                ),
-              ]
-          ),
-
-          // Updated table with payment method, bank, and quantity columns
-          // In the PDF table headers, update the column structure:
-          pw.Table(
-            columnWidths: {
-              0: const pw.FlexColumnWidth(1.2), // Date
-              1: const pw.FlexColumnWidth(2),    // Description
-              2: const pw.FlexColumnWidth(1),    // Method
-              3: const pw.FlexColumnWidth(1.5),  // Bank
-              4: const pw.FlexColumnWidth(1),    // Quantity
-              5: const pw.FlexColumnWidth(1),    // Weight
-              6: const pw.FlexColumnWidth(1.2),  // Credit
-              7: const pw.FlexColumnWidth(1.2),  // Debit
-              8: const pw.FlexColumnWidth(1.5),  // Balance
-            },
-            border: pw.TableBorder.all(),
-            children: [
-              // Header row
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                children: [
-                  _buildPdfHeaderCell('Date'),
-                  _buildPdfHeaderCell('Description'),
-                  _buildPdfHeaderCell('Method'),
-                  _buildPdfHeaderCell('Bank'),
-                  _buildPdfHeaderCell('Qty'),
-                  _buildPdfHeaderCell('Weight'),
-                  _buildPdfHeaderCell('Credit (Rs)'),
-                  _buildPdfHeaderCell('Debit (Rs)'),
-                  _buildPdfHeaderCell('Balance (Rs)'),
-                ],
-              ),
-              // Data rows
-              ..._filteredLedgerEntries.expand((entry) {
-                final List<pw.TableRow> rows = [];
-                final bankName = _getBankName(entry);
-                final bankLogo = bankName != null ? bankLogoImages[bankName.toLowerCase()] : null;
-                final isPayment = entry['description'].toString().contains('Payment');
-                final isPurchase = entry['description'].toString().contains('Purchase');
-                final isOpeningBalance = entry['description'] == 'Opening Balance';
-                final displayDate = isOpeningBalance
-                    ? entry['date']
-                    : _getFormattedDate(_getDisplayDate(entry));
-
-                // Calculate total quantity and weight for purchases
-                double totalQuantity = 0.0;
-                double totalWeight = 0.0;
-                if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
-                  final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
-                  totalQuantity = purchaseItems.fold(0.0, (sum, item) => sum + (item['quantity'] ?? 0));
-                  totalWeight = purchaseItems.fold(0.0, (sum, item) => sum + (item['weight'] ?? 0));
-                }
-
-                // Main row
-                rows.add(
-                  pw.TableRow(
-                    children: [
-                      _buildPdfCell(displayDate),
-                      _buildPdfCell(entry['description']),
-                      _buildPdfCell(isPayment ? (entry['method'] ?? '-') : '-'),
-                      isPayment
-                          ? pw.Row(
-                        children: [
-                          if (bankLogo != null)
-                            pw.Container(
-                              width: 20,
-                              height: 20,
-                              margin: const pw.EdgeInsets.only(right: 4),
-                              child: pw.Image(bankLogo),
-                            ),
-                          pw.Text(bankName ?? '-', style: const pw.TextStyle(fontSize: 9)),
-                        ],
-                      )
-                          : _buildPdfCell('-'),
-                      _buildPdfCell(isPurchase ? totalQuantity.toStringAsFixed(2) : '-'),
-                      _buildPdfCell(isPurchase ? totalWeight.toStringAsFixed(2) : '-'),
-                      _buildPdfCell(entry['credit'].toStringAsFixed(2)),
-                      _buildPdfCell(entry['debit'].toStringAsFixed(2)),
-                      _buildPdfCell(entry['balance'].toStringAsFixed(2)),
-                    ],
-                  ),
-                );
-
-                // Add purchase details if expanded
-                if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
-                  final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
-                  if (purchaseItems.isNotEmpty) {
-                    // Add header for purchase details
-                    rows.add(
-                      pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                        children: [
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('Item Name', isHeader: true),
-                          _buildPdfCell('Qty', isHeader: true),
-                          _buildPdfCell('Weight', isHeader: true),
-                          _buildPdfCell('Price', isHeader: true),
-                          _buildPdfCell('Total', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                        ],
-                      ),
-                    );
-
-                    // Add purchase items
-                    for (final item in purchaseItems) {
-                      rows.add(
-                        pw.TableRow(
-                          children: [
-                            _buildPdfCell(''),
-                            _buildPdfCell(item['itemName']),
-                            _buildPdfCell((item['quantity'] ?? 0).toStringAsFixed(2)),
-                            _buildPdfCell((item['weight'] ?? 0).toStringAsFixed(2)),
-                            _buildPdfCell((item['price'] ?? item['purchasePrice'] ?? 0).toStringAsFixed(2)),
-                            _buildPdfCell((item['total'] ?? 0).toStringAsFixed(2)),
-                            _buildPdfCell(''),
-                            _buildPdfCell(''),
-                            _buildPdfCell(''),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // Add purchase summary with total quantity and weight
-                    final totalAmount = purchaseItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0));
-
-                    rows.add(
-                      pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfColors.grey50),
-                        children: [
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('Purchase Summary:', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                          _buildPdfCell('', isHeader: true),
-                        ],
-                      ),
-                    );
-
-                    // Total Quantity row
-                    rows.add(
-                      pw.TableRow(
-                        children: [
-                          _buildPdfCell(''),
-                          _buildPdfCell('Total Quantity:'),
-                          _buildPdfCell(totalQuantity.toStringAsFixed(2), isHeader: true),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                        ],
-                      ),
-                    );
-
-                    // Total Weight row
-                    rows.add(
-                      pw.TableRow(
-                        children: [
-                          _buildPdfCell(''),
-                          _buildPdfCell('Total Weight:'),
-                          _buildPdfCell(''),
-                          _buildPdfCell(totalWeight.toStringAsFixed(2), isHeader: true),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                        ],
-                      ),
-                    );
-
-                    // Grand Total row
-                    rows.add(
-                      pw.TableRow(
-                        children: [
-                          _buildPdfCell(''),
-                          _buildPdfCell('Grand Total:'),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(entry['grandTotal']?.toStringAsFixed(2) ?? '0.00', isHeader: true),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                        ],
-                      ),
-                    );
-                  }
-                }
-
-                return rows;
-              }).toList(),
-
-              // Total row - Calculate overall total quantity and weight
-              pw.TableRow(
-                children: [
-                  _buildPdfCell('Total', isHeader: true),
-                  _buildPdfCell(''),
-                  _buildPdfCell(''),
-                  _buildPdfCell(''),
-                  _buildPdfCell(_calculateTotalQuantity().toStringAsFixed(2), isHeader: true),
-                  _buildPdfCell(_calculateTotalWeight().toStringAsFixed(2), isHeader: true),
-                  _buildPdfCell(_totalCredit.toStringAsFixed(2), isHeader: true),
-                  _buildPdfCell(_totalDebit.toStringAsFixed(2), isHeader: true),
-                  _buildPdfCell(_currentBalance.toStringAsFixed(2), isHeader: true),
-                ],
-              ),
-            ],
-          ),
-
-          pw.Container(
-            alignment: pw.Alignment.centerRight,
-            margin: const pw.EdgeInsets.only(top: 10),
-            child: pw.Text(
-              'Printed on: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-              style: const pw.TextStyle(fontSize: 10),
-            ),
-          ),
-          // Footer Section
-          pw.Spacer(), // Push footer to the bottom of the page
-          pw.Divider(),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Image(footerLogo, width: 20, height: 20), // Footer logo
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  pw.Text(
-                    'Developed By: Umair Arshad',
-                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'Contact: 0307-6455926',
-                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-
-    await Printing.layoutPdf(onLayout: (format) => pdf.save());
-  }
+  // Future<void> _printLedger() async {
+  //   final pdf = pw.Document();
+  //
+  //   // Load the logo image
+  //   final logoImage = await rootBundle.load('assets/images/logo.png');
+  //   final logo = pw.MemoryImage(logoImage.buffer.asUint8List());
+  //
+  //   // Load the footer logo if different
+  //   final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+  //   final footerBuffer = footerBytes.buffer.asUint8List();
+  //   final footerLogo = pw.MemoryImage(footerBuffer);
+  //
+  //   // Helper method to format the date
+  //   String _getFormattedDate(String dateString) {
+  //     final DateTime? parsedDate = DateTime.tryParse(dateString);
+  //     return parsedDate != null
+  //         ? "${parsedDate.month}/${parsedDate.day}/${parsedDate.year % 100}"
+  //         : "Unknown Date";
+  //   }
+  //
+  //   // Load bank logos
+  //   Map<String, pw.MemoryImage> bankLogoImages = {};
+  //   for (var bank in pakistaniBanks) {
+  //     try {
+  //       final logoBytes = await rootBundle.load(bank.iconPath);
+  //       final logoBuffer = logoBytes.buffer.asUint8List();
+  //       bankLogoImages[bank.name.toLowerCase()] = pw.MemoryImage(logoBuffer);
+  //     } catch (e) {
+  //       print('Error loading bank logo: ${bank.iconPath} - $e');
+  //     }
+  //   }
+  //
+  //   pdf.addPage(
+  //     pw.MultiPage(
+  //       pageFormat: PdfPageFormat.a4,
+  //       margin: const pw.EdgeInsets.all(20),
+  //       build: (pw.Context context) => [
+  //         pw.Row(
+  //             mainAxisAlignment: pw.MainAxisAlignment.center,
+  //             children: [
+  //               pw.Header(
+  //                 level: 0,
+  //                 child: pw.Column(
+  //                   children: [
+  //                     pw.Image(logo, width: 120, height: 120),
+  //                     pw.Text(
+  //                       'M. Hamza: 0335-4393403',
+  //                       style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+  //                     ),
+  //                     pw.SizedBox(height: 5),
+  //                     pw.Text('Vendor: ${widget.vendorName}',
+  //                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+  //                     if (_selectedDateRange != null)
+  //                       pw.Text(
+  //                         'Date Range: ${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}/${_selectedDateRange!.start.year} - '
+  //                             '${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}/${_selectedDateRange!.end.year}',
+  //                         style: const pw.TextStyle(fontSize: 12),
+  //                       ),
+  //                   ],
+  //                 ),
+  //               ),
+  //             ]
+  //         ),
+  //
+  //         // Updated table with payment method, bank, and quantity columns
+  //         // In the PDF table headers, update the column structure:
+  //         pw.Table(
+  //           columnWidths: {
+  //             0: const pw.FlexColumnWidth(1.2), // Date
+  //             1: const pw.FlexColumnWidth(2),    // Description
+  //             2: const pw.FlexColumnWidth(1),    // Method
+  //             3: const pw.FlexColumnWidth(1.5),  // Bank
+  //             4: const pw.FlexColumnWidth(1),    // Quantity
+  //             5: const pw.FlexColumnWidth(1),    // Weight
+  //             6: const pw.FlexColumnWidth(1.2),  // Credit
+  //             7: const pw.FlexColumnWidth(1.2),  // Debit
+  //             8: const pw.FlexColumnWidth(1.5),  // Balance
+  //           },
+  //           border: pw.TableBorder.all(),
+  //           children: [
+  //             // Header row
+  //             pw.TableRow(
+  //               decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+  //               children: [
+  //                 _buildPdfHeaderCell('Date'),
+  //                 _buildPdfHeaderCell('Description'),
+  //                 _buildPdfHeaderCell('Method'),
+  //                 _buildPdfHeaderCell('Bank'),
+  //                 _buildPdfHeaderCell('Qty'),
+  //                 _buildPdfHeaderCell('Weight'),
+  //                 _buildPdfHeaderCell('Credit (Rs)'),
+  //                 _buildPdfHeaderCell('Debit (Rs)'),
+  //                 _buildPdfHeaderCell('Balance (Rs)'),
+  //               ],
+  //             ),
+  //             // Data rows
+  //             ..._filteredLedgerEntries.expand((entry) {
+  //               final List<pw.TableRow> rows = [];
+  //               final bankName = _getBankName(entry);
+  //               final bankLogo = bankName != null ? bankLogoImages[bankName.toLowerCase()] : null;
+  //               final isPayment = entry['description'].toString().contains('Payment');
+  //               final isPurchase = entry['description'].toString().contains('Purchase');
+  //               final isOpeningBalance = entry['description'] == 'Opening Balance';
+  //               final displayDate = isOpeningBalance
+  //                   ? entry['date']
+  //                   : _getFormattedDate(_getDisplayDate(entry));
+  //
+  //               // Calculate total quantity and weight for purchases
+  //               double totalQuantity = 0.0;
+  //               double totalWeight = 0.0;
+  //               if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
+  //                 final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
+  //                 totalQuantity = purchaseItems.fold(0.0, (sum, item) => sum + (item['quantity'] ?? 0));
+  //                 totalWeight = purchaseItems.fold(0.0, (sum, item) => sum + (item['weight'] ?? 0));
+  //               }
+  //
+  //               // Main row
+  //               rows.add(
+  //                 pw.TableRow(
+  //                   children: [
+  //                     _buildPdfCell(displayDate),
+  //                     _buildPdfCell(entry['description']),
+  //                     _buildPdfCell(isPayment ? (entry['method'] ?? '-') : '-'),
+  //                     isPayment
+  //                         ? pw.Row(
+  //                       children: [
+  //                         if (bankLogo != null)
+  //                           pw.Container(
+  //                             width: 20,
+  //                             height: 20,
+  //                             margin: const pw.EdgeInsets.only(right: 4),
+  //                             child: pw.Image(bankLogo),
+  //                           ),
+  //                         pw.Text(bankName ?? '-', style: const pw.TextStyle(fontSize: 9)),
+  //                       ],
+  //                     )
+  //                         : _buildPdfCell('-'),
+  //                     _buildPdfCell(isPurchase ? totalQuantity.toStringAsFixed(2) : '-'),
+  //                     _buildPdfCell(isPurchase ? totalWeight.toStringAsFixed(2) : '-'),
+  //                     _buildPdfCell(entry['credit'].toStringAsFixed(2)),
+  //                     _buildPdfCell(entry['debit'].toStringAsFixed(2)),
+  //                     _buildPdfCell(entry['balance'].toStringAsFixed(2)),
+  //                   ],
+  //                 ),
+  //               );
+  //
+  //               // Add purchase details if expanded
+  //               if (isPurchase && _isPurchaseExpanded(entry['purchaseId'])) {
+  //                 final purchaseItems = _purchaseItems[entry['purchaseId']] ?? [];
+  //                 if (purchaseItems.isNotEmpty) {
+  //                   // Add header for purchase details
+  //                   rows.add(
+  //                     pw.TableRow(
+  //                       decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+  //                       children: [
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('Item Name', isHeader: true),
+  //                         _buildPdfCell('Qty', isHeader: true),
+  //                         _buildPdfCell('Weight', isHeader: true),
+  //                         _buildPdfCell('Price', isHeader: true),
+  //                         _buildPdfCell('Total', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                       ],
+  //                     ),
+  //                   );
+  //
+  //                   // Add purchase items
+  //                   for (final item in purchaseItems) {
+  //                     rows.add(
+  //                       pw.TableRow(
+  //                         children: [
+  //                           _buildPdfCell(''),
+  //                           _buildPdfCell(item['itemName']),
+  //                           _buildPdfCell((item['quantity'] ?? 0).toStringAsFixed(2)),
+  //                           _buildPdfCell((item['weight'] ?? 0).toStringAsFixed(2)),
+  //                           _buildPdfCell((item['price'] ?? item['purchasePrice'] ?? 0).toStringAsFixed(2)),
+  //                           _buildPdfCell((item['total'] ?? 0).toStringAsFixed(2)),
+  //                           _buildPdfCell(''),
+  //                           _buildPdfCell(''),
+  //                           _buildPdfCell(''),
+  //                         ],
+  //                       ),
+  //                     );
+  //                   }
+  //
+  //                   // Add purchase summary with total quantity and weight
+  //                   final totalAmount = purchaseItems.fold(0.0, (sum, item) => sum + (item['total'] ?? 0));
+  //
+  //                   rows.add(
+  //                     pw.TableRow(
+  //                       decoration: const pw.BoxDecoration(color: PdfColors.grey50),
+  //                       children: [
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('Purchase Summary:', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                         _buildPdfCell('', isHeader: true),
+  //                       ],
+  //                     ),
+  //                   );
+  //
+  //                   // Total Quantity row
+  //                   rows.add(
+  //                     pw.TableRow(
+  //                       children: [
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell('Total Quantity:'),
+  //                         _buildPdfCell(totalQuantity.toStringAsFixed(2), isHeader: true),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                       ],
+  //                     ),
+  //                   );
+  //
+  //                   // Total Weight row
+  //                   rows.add(
+  //                     pw.TableRow(
+  //                       children: [
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell('Total Weight:'),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(totalWeight.toStringAsFixed(2), isHeader: true),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                       ],
+  //                     ),
+  //                   );
+  //
+  //                   // Grand Total row
+  //                   rows.add(
+  //                     pw.TableRow(
+  //                       children: [
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell('Grand Total:'),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(entry['grandTotal']?.toStringAsFixed(2) ?? '0.00', isHeader: true),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                         _buildPdfCell(''),
+  //                       ],
+  //                     ),
+  //                   );
+  //                 }
+  //               }
+  //
+  //               return rows;
+  //             }).toList(),
+  //
+  //             // Total row - Calculate overall total quantity and weight
+  //             pw.TableRow(
+  //               children: [
+  //                 _buildPdfCell('Total', isHeader: true),
+  //                 _buildPdfCell(''),
+  //                 _buildPdfCell(''),
+  //                 _buildPdfCell(''),
+  //                 _buildPdfCell(_calculateTotalQuantity().toStringAsFixed(2), isHeader: true),
+  //                 _buildPdfCell(_calculateTotalWeight().toStringAsFixed(2), isHeader: true),
+  //                 _buildPdfCell(_totalCredit.toStringAsFixed(2), isHeader: true),
+  //                 _buildPdfCell(_totalDebit.toStringAsFixed(2), isHeader: true),
+  //                 _buildPdfCell(_currentBalance.toStringAsFixed(2), isHeader: true),
+  //               ],
+  //             ),
+  //           ],
+  //         ),
+  //
+  //         pw.Container(
+  //           alignment: pw.Alignment.centerRight,
+  //           margin: const pw.EdgeInsets.only(top: 10),
+  //           child: pw.Text(
+  //             'Printed on: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+  //             style: const pw.TextStyle(fontSize: 10),
+  //           ),
+  //         ),
+  //         // Footer Section
+  //         pw.Spacer(), // Push footer to the bottom of the page
+  //         pw.Divider(),
+  //         pw.Row(
+  //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //           children: [
+  //             pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+  //             pw.Column(
+  //               crossAxisAlignment: pw.CrossAxisAlignment.center,
+  //               children: [
+  //                 pw.Text(
+  //                   'Developed By: Umair Arshad',
+  //                   style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+  //                 ),
+  //                 pw.Text(
+  //                   'Contact: 0307-6455926',
+  //                   style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+  //                 ),
+  //               ],
+  //             ),
+  //           ],
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  //
+  //   await Printing.layoutPdf(onLayout: (format) => pdf.save());
+  // }
 
   // Helper method to calculate total weight across all purchases
   double _calculateTotalWeight() {
@@ -970,16 +1449,16 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     return totalQuantity;
   }
 
-  pw.Widget _buildPdfHeaderCell(String text) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(6),
-      decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-      ),
-    );
-  }
+  // pw.Widget _buildPdfHeaderCell(String text) {
+  //   return pw.Container(
+  //     padding: const pw.EdgeInsets.all(6),
+  //     decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+  //     child: pw.Text(
+  //       text,
+  //       style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+  //     ),
+  //   );
+  // }
 
   pw.Widget _buildPdfCell(String text, {bool isHeader = false}) {
     return pw.Container(
