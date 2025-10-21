@@ -37,6 +37,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 
   // Controllers
   late TextEditingController _vendorSearchController;
+  late TextEditingController _refNoController;
 
   bool _isLoadingItems = false;
   bool _isLoadingVendors = false;
@@ -56,6 +57,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
     super.initState();
     _selectedDateTime = DateTime.now();
     _vendorSearchController = TextEditingController();
+    _refNoController = TextEditingController();
 
     if (widget.isEditMode && widget.purchaseKey != null) {
       // Load existing purchase data for editing
@@ -66,7 +68,8 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
           ..itemNameController.text = item['itemName']?.toString() ?? ''
           ..quantityController.text = (item['quantity'] as num?)?.toString() ?? '0'
           ..weightController.text = (item['weight'] as num?)?.toString() ?? '0' // NEW: Add weight
-          ..priceController.text = (item['purchasePrice'] as num?)?.toString() ?? '0';
+          ..priceController.text = (item['purchasePrice'] as num?)?.toString() ?? '0'
+          ..calculationType = item['calculationType'] ?? 'weight'; // Load calculation type
       }).toList();
     } else {
       // Default to 3 empty items if not from purchase order
@@ -116,6 +119,11 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
             _vendorSearchController.text = purchaseData['vendorName'].toString();
           }
 
+          // Load ref no
+          if (purchaseData['refNo'] != null) {
+            _refNoController.text = purchaseData['refNo'].toString();
+          }
+
           // Load items with backward compatibility for weight
           final items = purchaseData['items'] as List<dynamic>?;
           if (items != null) {
@@ -134,7 +142,8 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                 ..itemNameController.text = itemMap['itemName']?.toString() ?? ''
                 ..quantityController.text = (itemMap['quantity'] as num?)?.toString() ?? '0'
                 ..weightController.text = weight.toString() // Use 0 for old purchases without weight
-                ..priceController.text = (itemMap['purchasePrice'] as num?)?.toString() ?? '0';
+                ..priceController.text = (itemMap['purchasePrice'] as num?)?.toString() ?? '0'
+                ..calculationType = itemMap['calculationType'] ?? 'weight'; // Load calculation type
             }).toList();
           }
         });
@@ -145,6 +154,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
   @override
   void dispose() {
     _vendorSearchController.dispose();
+    _refNoController.dispose();
 
     // Dispose all item controllers immediately since the widget is being disposed
     for (var item in _purchaseItems) {
@@ -563,11 +573,30 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
   double calculateTotal() {
     double total = 0.0;
     for (var item in _purchaseItems) {
+      final quantity = double.tryParse(item.quantityController.text) ?? 0.0;
       final weight = double.tryParse(item.weightController.text) ?? 0.0;
       final price = double.tryParse(item.priceController.text) ?? 0.0;
-      total += weight * price; // CHANGED: Use weight × price instead of quantity × price
+
+      // Calculate based on calculation type
+      if (item.calculationType == 'quantity') {
+        total += quantity * price;
+      } else {
+        total += weight * price; // Default to weight calculation
+      }
     }
     return total;
+  }
+
+  double calculateItemTotal(PurchaseItem item) {
+    final quantity = double.tryParse(item.quantityController.text) ?? 0.0;
+    final weight = double.tryParse(item.weightController.text) ?? 0.0;
+    final price = double.tryParse(item.priceController.text) ?? 0.0;
+
+    if (item.calculationType == 'quantity') {
+      return quantity * price;
+    } else {
+      return weight * price;
+    }
   }
 
   void _clearForm() {
@@ -581,6 +610,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
       _purchaseItems = List.generate(3, (index) => PurchaseItem());
       _selectedVendor = null;
       _selectedDateTime = DateTime.now();
+      _refNoController.clear();
     });
 
     // Clear text controllers
@@ -649,6 +679,18 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                   pw.Text(dateFormat.format(_selectedDateTime)),
                 ],
               ),
+              pw.SizedBox(height: 5),
+              if (_refNoController.text.isNotEmpty)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      languageProvider.isEnglish ? 'Ref No: ' : 'ریف نمبر: ',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(_refNoController.text),
+                  ],
+                ),
               pw.SizedBox(height: 20),
               pw.TableHelper.fromTextArray(
                 context: context,
@@ -664,8 +706,9 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                   languageProvider.isEnglish ? 'No.' : 'نمبر',
                   languageProvider.isEnglish ? 'Item Name' : 'آئٹم کا نام',
                   languageProvider.isEnglish ? 'Qty' : 'مقدار',
-                  languageProvider.isEnglish ? 'Weight' : 'وزن', // NEW: Add weight header
+                  languageProvider.isEnglish ? 'Weight' : 'وزن',
                   languageProvider.isEnglish ? 'Price' : 'قیمت',
+                  languageProvider.isEnglish ? 'Calc Type' : 'حساب کتاب',
                   languageProvider.isEnglish ? 'Total' : 'کل',
                 ],
                 data: _purchaseItems.where((item) =>
@@ -673,9 +716,12 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                     item.quantityController.text.isNotEmpty &&
                     item.priceController.text.isNotEmpty).map((item) {
                   final quantity = double.tryParse(item.quantityController.text) ?? 0.0;
-                  final weight = double.tryParse(item.weightController.text) ?? 0.0; // Default to 0 if empty
+                  final weight = double.tryParse(item.weightController.text) ?? 0.0;
                   final price = double.tryParse(item.priceController.text) ?? 0.0;
-                  final itemTotal = weight * price; // Use weight × price
+                  final itemTotal = calculateItemTotal(item);
+                  final calcType = item.calculationType == 'quantity'
+                      ? (languageProvider.isEnglish ? 'Qty × Price' : 'مقدار × قیمت')
+                      : (languageProvider.isEnglish ? 'Weight × Price' : 'وزن × قیمت');
 
                   return [
                     '${_purchaseItems.indexOf(item) + 1}',
@@ -683,6 +729,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                     quantity.toStringAsFixed(2),
                     weight.toStringAsFixed(2),
                     price.toStringAsFixed(2),
+                    calcType,
                     itemTotal.toStringAsFixed(2),
                   ];
                 }).toList(),
@@ -818,6 +865,30 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                     },
                   ),
                   const SizedBox(height: 16),
+
+                  // Ref No Field
+                  Text(
+                    languageProvider.isEnglish ? 'Reference Number' : 'ریفیرنس نمبر',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFE65100),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _refNoController,
+                    decoration: InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'Enter Reference Number' : 'ریفیرنس نمبر درج کریں',
+                      border: OutlineInputBorder(
+                        borderSide: BorderSide(color: Color(0xFFFF8A65)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Color(0xFFFF8A65)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
 // Purchase Items Section
                   Card(
                     elevation: 2,
@@ -830,7 +901,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                languageProvider.isEnglish ? 'Purchase Items' : 'خریداری کے آئٹمز',
+                                languageProvider.isEnglish ? 'Invoice Items' : 'خریداری کے آئٹمز',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFFE65100),
@@ -872,11 +943,12 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                               2: FlexColumnWidth(1),
                               3: FlexColumnWidth(1), // Weight column
                               4: FlexColumnWidth(1), // Price column
-                              5: FixedColumnWidth(40), // Delete column
+                              5: FlexColumnWidth(1.2), // Calculation Type column
+                              6: FixedColumnWidth(40), // Delete column
                             },
                             border: TableBorder.all(color: Colors.orange.shade100, width: 1),
                             children: [
-                              // Header - 6 columns
+                              // Header - 7 columns
                               TableRow(
                                 decoration: BoxDecoration(color: Colors.orange.shade50),
                                 children: [
@@ -885,11 +957,12 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                                   tableHeader(languageProvider.isEnglish ? 'Qty' : 'مقدار'),
                                   tableHeader(languageProvider.isEnglish ? 'Weight' : 'وزن'),
                                   tableHeader(languageProvider.isEnglish ? 'Price' : 'قیمت'),
+                                  tableHeader(languageProvider.isEnglish ? 'Calc Type' : 'حساب کتاب'),
                                   SizedBox(), // Delete column header
                                 ],
                               ),
 
-                              // Item Rows - 6 columns
+                              // Item Rows - 7 columns
                               ..._purchaseItems.asMap().entries.map((entry) {
                                 final index = entry.key;
                                 final item = entry.value;
@@ -991,7 +1064,35 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                                       ),
                                     ),
 
-                                    // Column 6: Delete Icon
+                                    // Column 6: Calculation Type Dropdown
+                                    Padding(
+                                      padding: const EdgeInsets.all(6.0),
+                                      child: DropdownButtonFormField<String>(
+                                        value: item.calculationType,
+                                        items: [
+                                          DropdownMenuItem(
+                                            value: 'weight',
+                                            child: Text(languageProvider.isEnglish ? 'Weight × Price' : 'وزن × قیمت'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: 'quantity',
+                                            child: Text(languageProvider.isEnglish ? 'Qty × Price' : 'مقدار × قیمت'),
+                                          ),
+                                        ],
+                                        onChanged: (value) {
+                                          setState(() {
+                                            item.calculationType = value!;
+                                          });
+                                        },
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Column 7: Delete Icon
                                     Center(
                                       child: IconButton(
                                         icon: const Icon(Icons.remove_circle, color: Colors.red, size: 20),
@@ -1227,11 +1328,11 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         final purchaseData = {
           'items': validItems.map((purchaseItem) => {
             'itemName': purchaseItem.itemNameController.text,
-            'weight': double.tryParse(purchaseItem.weightController.text) ?? 0.0, // NEW: Add weight
+            'weight': double.tryParse(purchaseItem.weightController.text) ?? 0.0,
             'quantity': double.tryParse(purchaseItem.quantityController.text) ?? 0.0,
             'purchasePrice': double.tryParse(purchaseItem.priceController.text) ?? 0.0,
-            'total': (double.tryParse(purchaseItem.weightController.text) ?? 0.0) * // CHANGED: Use weight
-                (double.tryParse(purchaseItem.priceController.text) ?? 0.0),
+            'calculationType': purchaseItem.calculationType, // Save calculation type
+            'total': calculateItemTotal(purchaseItem), // Use the correct calculation
             'isBOM': _items.any((item) =>
             item['itemName'].toLowerCase() ==
                 purchaseItem.itemNameController.text.toLowerCase() &&
@@ -1239,6 +1340,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
           }).toList(),
           'vendorId': vendorKey,
           'vendorName': _selectedVendor!['name'],
+          'refNo': _refNoController.text, // Save reference number
           'grandTotal': calculateTotal(),
           'timestamp': _selectedDateTime.toString(),
           'type': 'credit',
@@ -1510,14 +1612,15 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 class PurchaseItem {
   late TextEditingController itemNameController;
   late TextEditingController quantityController;
-  late TextEditingController weightController; // NEW: Add weight controller
+  late TextEditingController weightController;
   late TextEditingController priceController;
+  String calculationType = 'weight'; // Default to weight calculation
   Map<String, dynamic>? selectedItem;
 
   PurchaseItem() {
     itemNameController = TextEditingController();
     quantityController = TextEditingController();
-    weightController = TextEditingController(); // NEW: Initialize weight controller
+    weightController = TextEditingController();
     priceController = TextEditingController();
     selectedItem = null;
   }
@@ -1525,7 +1628,7 @@ class PurchaseItem {
   void dispose() {
     itemNameController.dispose();
     quantityController.dispose();
-    weightController.dispose(); // NEW: Dispose weight controller
+    weightController.dispose();
     priceController.dispose();
   }
 }

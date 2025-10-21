@@ -35,37 +35,57 @@ class CashbookListPage extends StatefulWidget {
 }
 
 class _CashbookListPageState extends State<CashbookListPage> {
-
-
   Future<List<CashbookEntry>> _getFilteredEntries() async {
-    DataSnapshot snapshot = await widget.databaseRef.get();
-    List<CashbookEntry> entries = [];
+    try {
+      DataSnapshot snapshot = await widget.databaseRef.get();
+      List<CashbookEntry> entries = [];
 
-    if (snapshot.value != null) {
-      Map<dynamic, dynamic> entriesMap = snapshot.value as Map<dynamic, dynamic>;
+      if (snapshot.value != null) {
+        Map<dynamic, dynamic> entriesMap = snapshot.value as Map<dynamic, dynamic>;
 
-      // In _getFilteredEntries():
-      DateTime todayStart = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-      DateTime todayEnd = DateTime(todayStart.year, todayStart.month, todayStart.day, 23, 59, 59);
+        // Set date range for filtering
+        DateTime todayStart = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+        DateTime todayEnd = DateTime(todayStart.year, todayStart.month, todayStart.day, 23, 59, 59);
 
-      DateTime? filterStart = widget.startDate ?? todayStart;
-      DateTime? filterEnd = widget.endDate ?? todayEnd;
+        DateTime? filterStart = widget.startDate ?? todayStart;
+        DateTime? filterEnd = widget.endDate ?? todayEnd;
 
-      entriesMap.forEach((key, value) {
-        CashbookEntry entry = CashbookEntry.fromJson(Map<String, dynamic>.from(value));
+        entriesMap.forEach((key, value) {
+          try {
+            // Ensure value is not null and is a Map
+            if (value != null && value is Map<dynamic, dynamic>) {
+              // Convert to Map<String, dynamic> with null safety
+              Map<String, dynamic> entryData = {};
+              value.forEach((k, v) {
+                if (k != null && k is String) {
+                  entryData[k] = v;
+                }
+              });
 
-        if ((entry.dateTime.isAfter(filterStart) ||
-            entry.dateTime.isAtSameMomentAs(filterStart)) &&
-            (entry.dateTime.isBefore(filterEnd.add(const Duration(days: 1))) ||
-                entry.dateTime.isAtSameMomentAs(filterEnd))) {
-          entries.add(entry);
-        }
+              // Add the entry ID
+              entryData['id'] = key.toString();
 
-      });
+              CashbookEntry entry = CashbookEntry.fromJson(entryData);
+
+              // Apply date filter
+              if ((entry.dateTime.isAfter(filterStart) ||
+                  entry.dateTime.isAtSameMomentAs(filterStart)) &&
+                  (entry.dateTime.isBefore(filterEnd.add(const Duration(days: 1))) ||
+                      entry.dateTime.isAtSameMomentAs(filterEnd))) {
+                entries.add(entry);
+              }
+            }
+          } catch (e) {
+            print('Error parsing entry $key: $e');
+          }
+        });
+      }
+      return entries;
+    } catch (e) {
+      print('Error fetching entries: $e');
+      return [];
     }
-    return entries;
   }
-
 
   Map<String, double> _calculateTotals(List<CashbookEntry> entries) {
     double totalCashIn = 0;
@@ -300,7 +320,6 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
-
   Future<void> _deleteEntry(String id) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     try {
@@ -401,12 +420,16 @@ class _CashbookListPageState extends State<CashbookListPage> {
     return FutureBuilder<List<CashbookEntry>>(
       future: _getFilteredEntries(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.active) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.connectionState == ConnectionState.active) {
           return const Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('No entries found'));
+          return Center(child: Text(Provider.of<LanguageProvider>(context).isEnglish
+              ? 'No entries found'
+              : 'کوئی انٹری نہیں ملی'));
         } else {
           final entries = snapshot.data!;
           final totals = _calculateTotals(entries);
@@ -503,7 +526,6 @@ class _CashbookListPageState extends State<CashbookListPage> {
   }
 
   void _editEntry(CashbookEntry entry) {
-    // Navigate to form page with entry data
     Navigator.push(
       context,
       MaterialPageRoute(
