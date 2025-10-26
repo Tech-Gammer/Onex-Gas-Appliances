@@ -693,6 +693,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
               'chequeDate': paymentValue['chequeDate'], // Add cheque date
               'description': 'Payment via $paymentMethod',
               'credit': 0.0,
+              'description2':paymentValue['description'],
               'debit': (paymentValue['amount'] ?? 0.0).toDouble(),
               'type': 'debit',
               'method': paymentMethod,
@@ -1433,8 +1434,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
 
     return Column(
       children: [
-        // Enhanced Table Header
-        // In _buildDesktopLedgerView, update the header to include weight:
+        //header section
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -1457,6 +1457,7 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
           child: Row(
             children: [
               _buildEnhancedHeaderCell('Date', 1.2),
+              _buildEnhancedHeaderCell('Transaction', 2.5),
               _buildEnhancedHeaderCell('Description', 2.5),
               _buildEnhancedHeaderCell('Method', 1.2),
               _buildEnhancedHeaderCell('Bank', 2),
@@ -1694,6 +1695,12 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                 ),
                 2.5,
                 false,
+              ),
+              _buildEnhancedDataCell(
+                entry['description2'] ?? '-',
+                2.5,
+                false,
+                textColor: Colors.grey[700],
               ),
               _buildEnhancedDataCell(
                 entry['method'] ?? '-',

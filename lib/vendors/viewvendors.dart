@@ -403,66 +403,215 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
     );
   }
 
-  void _editOpeningBalance(String vendorId, double currentBalance) {
+  // void _editOpeningBalance(String vendorId, double currentBalance) {
+  //   TextEditingController _balanceController = TextEditingController(text: currentBalance.toString());
+  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return AlertDialog(
+  //         title:  Text(
+  //             languageProvider.isEnglish ? 'Edit Opening Balance' : 'اوپننگ بیلنس میں ترمیم کریں۔'
+  //         ),
+  //         content: TextField(
+  //           controller: _balanceController,
+  //           keyboardType: TextInputType.number,
+  //           decoration:  InputDecoration(
+  //             labelText: languageProvider.isEnglish ? 'New Opening Balance' : 'نیا اوپننگ بیلنس'
+  //             ,
+  //             prefixIcon: Icon(Icons.account_balance),
+  //           ),
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () {
+  //               double newBalance = double.tryParse(_balanceController.text.trim()) ?? 0.0;
+  //
+  //               if (newBalance >= 0) {
+  //                 String currentDate = DateTime.now().toString(); // Capture current date
+  //                 _databaseRef.child(vendorId).update({
+  //                   'openingBalance': newBalance,
+  //                   'openingBalanceDate': currentDate, // Save date in Firebase
+  //                 });
+  //                 Navigator.pop(context);
+  //                 ScaffoldMessenger.of(context).showSnackBar(
+  //                   SnackBar(content: Text(
+  //                       languageProvider.isEnglish ? 'Opening balance updated successfully!' : 'اوپننگ بیلنس کامیابی کے ساتھ اپ ڈیٹ ہو گیا!'
+  //                   )),
+  //                 );
+  //               } else {
+  //                 ScaffoldMessenger.of(context).showSnackBar(
+  //                   SnackBar(content: Text(
+  //                       languageProvider.isEnglish ? 'Please enter a valid balance.' : 'براہ کرم ایک درست بیلنس درج کریں۔'
+  //                   )),
+  //                 );
+  //               }
+  //             },
+  //             child:  Text(
+  //                 languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔'
+  //             ),
+  //           ),
+  //           TextButton(
+  //             onPressed: () => Navigator.pop(context),
+  //             child:  Text(
+  //                 languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں۔'
+  //             ),
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
+  void _editOpeningBalance(String vendorId, double currentBalance, String currentDate) {
     TextEditingController _balanceController = TextEditingController(text: currentBalance.toString());
+    DateTime _selectedDate = DateTime.now(); // Default to current date
+
+    // Parse the current date if it exists
+    try {
+      if (currentDate != null && currentDate.isNotEmpty && currentDate != "Unknown Date") {
+        _selectedDate = DateTime.parse(currentDate);
+      }
+    } catch (e) {
+      print("Error parsing date: $e");
+      _selectedDate = DateTime.now();
+    }
+
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title:  Text(
-              languageProvider.isEnglish ? 'Edit Opening Balance' : 'اوپننگ بیلنس میں ترمیم کریں۔'
-          ),
-          content: TextField(
-            controller: _balanceController,
-            keyboardType: TextInputType.number,
-            decoration:  InputDecoration(
-              labelText: languageProvider.isEnglish ? 'New Opening Balance' : 'نیا اوپننگ بیلنس'
-              ,
-              prefixIcon: Icon(Icons.account_balance),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                double newBalance = double.tryParse(_balanceController.text.trim()) ?? 0.0;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                  languageProvider.isEnglish ? 'Edit Opening Balance' : 'اوپننگ بیلنس میں ترمیم کریں۔'
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _balanceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'New Opening Balance' : 'نیا اوپننگ بیلنس',
+                      prefixIcon: Icon(Icons.account_balance),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    title: Text(
+                      languageProvider.isEnglish ? 'Date' : 'تاریخ',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      DateFormat('yyyy-MM-dd').format(_selectedDate),
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    trailing: Icon(Icons.calendar_today, color: Colors.teal),
+                    onTap: () async {
+                      final DateTime? pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: ColorScheme.light(
+                                primary: Colors.teal,
+                                onPrimary: Colors.white,
+                                onSurface: Colors.black,
+                              ),
+                              textButtonTheme: TextButtonThemeData(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.teal,
+                                ),
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
 
-                if (newBalance >= 0) {
-                  String currentDate = DateTime.now().toString(); // Capture current date
-                  _databaseRef.child(vendorId).update({
-                    'openingBalance': newBalance,
-                    'openingBalanceDate': currentDate, // Save date in Firebase
-                  });
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(
-                        languageProvider.isEnglish ? 'Opening balance updated successfully!' : 'اوپننگ بیلنس کامیابی کے ساتھ اپ ڈیٹ ہو گیا!'
-                    )),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(
-                        languageProvider.isEnglish ? 'Please enter a valid balance.' : 'براہ کرم ایک درست بیلنس درج کریں۔'
-                    )),
-                  );
-                }
-              },
-              child:  Text(
-                  languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔'
+                      if (pickedDate != null && pickedDate != _selectedDate) {
+                        setState(() {
+                          _selectedDate = pickedDate;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    languageProvider.isEnglish
+                        ? 'Select the date for this opening balance'
+                        : 'اس اوپننگ بیلنس کے لیے تاریخ منتخب کریں',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child:  Text(
-                  languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں۔'
-              ),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                      languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں۔'
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    double newBalance = double.tryParse(_balanceController.text.trim()) ?? 0.0;
+
+                    if (newBalance >= 0) {
+                      String formattedDate = _selectedDate.toIso8601String();
+
+                      _databaseRef.child(vendorId).update({
+                        'openingBalance': newBalance,
+                        'openingBalanceDate': formattedDate,
+                      });
+
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              languageProvider.isEnglish
+                                  ? 'Opening balance updated successfully!'
+                                  : 'اوپننگ بیلنس کامیابی کے ساتھ اپ ڈیٹ ہو گیا!'
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              languageProvider.isEnglish
+                                  ? 'Please enter a valid balance.'
+                                  : 'براہ کرم ایک درست بیلنس درج کریں۔'
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  child: Text(
+                    languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
+
 
 
   @override
@@ -1042,6 +1191,17 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
     );
   }
 
+  String _formatDate(String dateString) {
+    try {
+      if (dateString == "Unknown Date" || dateString.isEmpty) {
+        return "Unknown Date";
+      }
+      DateTime date = DateTime.parse(dateString);
+      return DateFormat('yyyy-MM-dd').format(date);
+    } catch (e) {
+      return "Invalid Date";
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1169,6 +1329,13 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                             ),
                           ),
                           Text(
+                            '${languageProvider.isEnglish ? 'Opening Date' : 'تاریخ افتتاح'}: ${_formatDate(vendor["openingBalanceDate"])}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Text(
                             '${languageProvider.isEnglish ? 'Paid' : 'ادائیگی'}: ${vendor["paidAmount"].toStringAsFixed(2)} Rs',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
@@ -1177,9 +1344,17 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                           ),
                           Row(
                             children: [
+                              // IconButton(
+                              //   icon: Icon(Icons.edit, color: Color(0xFFFF8A65)),
+                              //   onPressed: () => _editOpeningBalance(vendor["id"], vendor["openingBalance"]),
+                              // ),
                               IconButton(
                                 icon: Icon(Icons.edit, color: Color(0xFFFF8A65)),
-                                onPressed: () => _editOpeningBalance(vendor["id"], vendor["openingBalance"]),
+                                onPressed: () => _editOpeningBalance(
+                                    vendor["id"],
+                                    vendor["openingBalance"],
+                                    vendor["openingBalanceDate"] // Pass the current date
+                                ),
                               ),
                               IconButton(
                                 icon: Icon(Icons.delete, color: Colors.red),
@@ -1325,10 +1500,10 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
         return {
           'id': entry.key,
           'amount': (entry.value['amount'] as num).toDouble(),
-          'description': entry.value['description'],
-          'date': entry.value['date'],
-          'paymentMethod': entry.value['paymentMethod'] ?? 'Unknown',
-          'imageBase64': entry.value['imageBase64'] ?? '', // Add this
+          'description': entry.value['description'] ?? '',
+          'date': entry.value['date'] ?? '',
+          'method': entry.value['method'] ?? 'Unknown', // Changed from 'paymentMethod' to 'method'
+          'image': entry.value['image'] ?? '', // Changed from 'imageBase64' to 'image'
         };
       }).toList();
     });
@@ -1338,129 +1513,167 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   void _editPayment(String paymentId, double existingAmount, String existingDescription, String existingMethod) {
     TextEditingController amountController = TextEditingController(text: existingAmount.toString());
     TextEditingController descriptionController = TextEditingController(text: existingDescription);
-    String selectedPaymentMethod = existingMethod;
+
+    // Map the existing method to a valid dropdown value
+    String mapToValidMethod(String method) {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+      if (languageProvider.isEnglish) {
+        if (method.toLowerCase().contains('cash')) return 'Cash';
+        if (method.toLowerCase().contains('online')) return 'Online';
+        if (method.toLowerCase().contains('bank')) return 'Bank';
+        if (method.toLowerCase().contains('cheque') || method.toLowerCase().contains('check')) return 'Cheque';
+        if (method.toLowerCase().contains('slip')) return 'Slip';
+        return 'Cash'; // default fallback
+      } else {
+        if (method.contains('نقد')) return 'نقد';
+        if (method.contains('آن لائن')) return 'آن لائن';
+        if (method.contains('بینک')) return 'بینک';
+        if (method.contains('چیک')) return 'چیک';
+        if (method.contains('پرچی')) return 'پرچی';
+        return 'نقد'; // default fallback
+      }
+    }
+
+    String selectedPaymentMethod = mapToValidMethod(existingMethod);
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    String? _base64Image; // Add this
+    String? _base64Image;
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Edit Payment' : 'ادائیگی میں ترمیم کریں'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
-                  decoration:  InputDecoration(
-                    labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
-                    prefixIcon: Icon(Icons.attach_money),
-                  ),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(languageProvider.isEnglish ? 'Edit Payment' : 'ادائیگی میں ترمیم کریں'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
+                        prefixIcon: Icon(Icons.attach_money),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                        prefixIcon: Icon(Icons.description),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: selectedPaymentMethod,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ',
+                        prefixIcon: Icon(Icons.payment),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: languageProvider.isEnglish ? "Cash" : "نقد",
+                          child: Text(languageProvider.isEnglish ? "Cash" : "نقد"),
+                        ),
+                        DropdownMenuItem(
+                          value: languageProvider.isEnglish ? "Online" : "آن لائن",
+                          child: Text(languageProvider.isEnglish ? "Online" : "آن لائن"),
+                        ),
+                        DropdownMenuItem(
+                          value: languageProvider.isEnglish ? "Bank" : "بینک",
+                          child: Text(languageProvider.isEnglish ? "Bank" : "بینک"),
+                        ),
+                        DropdownMenuItem(
+                          value: languageProvider.isEnglish ? "Cheque" : "چیک",
+                          child: Text(languageProvider.isEnglish ? "Cheque" : "چیک"),
+                        ),
+                        DropdownMenuItem(
+                          value: languageProvider.isEnglish ? "Slip" : "پرچی",
+                          child: Text(languageProvider.isEnglish ? "Slip" : "پرچی"),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedPaymentMethod = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton(
+                      onPressed: () async {
+                        String? base64 = await _pickImage();
+                        if (base64 != null) {
+                          setState(() => _base64Image = base64);
+                        }
+                      },
+                      child: Text(languageProvider.isEnglish ? 'Change Image' : 'تصویر تبدیل کریں'),
+                    ),
+                    if (_base64Image != null)
+                      GestureDetector(
+                        onTap: () => _showImagePreview(_base64Image!),
+                        child: Image.memory(
+                          base64Decode(_base64Image!),
+                          height: 100,
+                          width: 100,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descriptionController,
-                  decoration:  InputDecoration(
-                    labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-                    prefixIcon: Icon(Icons.description),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedPaymentMethod,
-                  decoration:  InputDecoration(
-                    labelText: languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ',
-                    prefixIcon: Icon(Icons.payment),
-                  ),
-                  items: [
-                    languageProvider.isEnglish ? "Cash" : "نقد",
-                    languageProvider.isEnglish ? "Online" : "آن لائن",
-                    languageProvider.isEnglish ? "Check" : "چیک"
-                  ].map((method) {
-                    return DropdownMenuItem(
-                      value: method,
-                      child: Text(method),
-                    );//s
-                  }).toList(),
-                  onChanged: (value) {
-                    selectedPaymentMethod = value!;
-                  },
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    String? base64 = await _pickImage();
-                    if (base64 != null) {
-                      setState(() => _base64Image = base64);
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    double newAmount = double.tryParse(amountController.text.trim()) ?? 0.0;
+                    String newDescription = descriptionController.text.trim();
+
+                    if (newAmount > 0) {
+                      final difference = newAmount - existingAmount;
+
+                      final updateData = {
+                        'amount': newAmount,
+                        'description': newDescription,
+                        'method': selectedPaymentMethod, // Use 'method' instead of 'paymentMethod'
+                      };
+
+                      // Add image only if changed
+                      if (_base64Image != null) {
+                        updateData['image'] = _base64Image!; // Use 'image' instead of 'imageBase64'
+                      }
+
+                      FirebaseDatabase.instance
+                          .ref('vendors/${widget.vendorId}/payments/$paymentId')
+                          .update(updateData);
+
+                      FirebaseDatabase.instance
+                          .ref('vendors/${widget.vendorId}/paidAmount')
+                          .set(ServerValue.increment(difference));
+
+                      Navigator.pop(context);
+                      _fetchPaymentHistory();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(languageProvider.isEnglish ? 'Payment updated successfully!' : 'ادائیگی کامیابی سے اپ ڈیٹ ہو گئی!')),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(languageProvider.isEnglish ? 'Please enter a valid amount.' : 'براہ کرم درست رقم درج کریں۔')),
+                      );
                     }
                   },
-                  child: Text(languageProvider.isEnglish ? 'Change Image' : 'تصویر تبدیل کریں'),
+                  child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
                 ),
-                if (_base64Image != null)
-                  GestureDetector(
-                    onTap: () => _showImagePreview(_base64Image!),
-                    child: Image.memory(
-                      base64Decode(_base64Image!),
-                      height: 100,
-                      width: 100,
-                    ),
-                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+                ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                double newAmount = double.tryParse(amountController.text.trim()) ?? 0.0;
-                String newDescription = descriptionController.text.trim();
-
-                if (newAmount > 0) {
-                  final difference = newAmount - existingAmount;
-
-                  // FirebaseDatabase.instance
-                  //     .ref('vendors/${widget.vendorId}/payments/$paymentId')
-                  //     .update({
-                  //   'amount': newAmount,
-                  //   'description': newDescription,
-                  //   'paymentMethod': selectedPaymentMethod,
-                  // });
-                  final updateData = {
-                    'amount': newAmount,
-                    'description': newDescription,
-                    'paymentMethod': selectedPaymentMethod,
-                  };
-
-                  // Add image only if changed
-                  if (_base64Image != null) {
-                    updateData['imageBase64'] = _base64Image!;
-                  }
-
-                   FirebaseDatabase.instance
-                      .ref('vendors/${widget.vendorId}/payments/$paymentId')
-                      .update(updateData);
-
-                  FirebaseDatabase.instance
-                      .ref('vendors/${widget.vendorId}/paidAmount')
-                      .set(ServerValue.increment(difference));
-                  Navigator.pop(context);
-                  _fetchPaymentHistory(); // Refresh the payment list
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(languageProvider.isEnglish ? 'Payment updated successfully!' : 'ادائیگی کامیابی سے اپ ڈیٹ ہو گئی!')),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(languageProvider.isEnglish ? 'Please enter a valid amount.' : 'براہ کرم درست رقم درج کریں۔')),
-                  );
-                }
-              },
-              child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -1542,23 +1755,22 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
         ),
       ),
       body: payments.isEmpty
-          ?  Center(child: Text(
+          ? Center(child: Text(
         languageProvider.isEnglish ? 'No payments recorded for this vendor.' : 'اس وینڈر کے لیے کوئی ادائیگی ریکارڈ نہیں کی گئی۔',
       ))
           : ListView.builder(
         itemCount: payments.length,
         itemBuilder: (context, index) {
           final payment = payments[index];
-          // Fix 'hasImage' error by calculating it here
-          final hasImage = payment['imageBase64'] != null &&
-              payment['imageBase64'].isNotEmpty;
+          // Use 'image' instead of 'imageBase64'
+          final hasImage = payment['image'] != null && payment['image'].isNotEmpty;
 
           return ListTile(
             leading: hasImage
                 ? GestureDetector(
-              onTap: () => _showImagePreview(payment['imageBase64']),
+              onTap: () => _showImagePreview(payment['image']),
               child: Image.memory(
-                base64Decode(payment['imageBase64']),
+                base64Decode(payment['image']),
                 width: 50,
                 height: 50,
                 fit: BoxFit.cover,
@@ -1567,9 +1779,9 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                 : const Icon(Icons.receipt, size: 40),
             title: Text("${languageProvider.isEnglish ? 'Amount' : 'رقم'}: ${payment['amount']}Rs"),
             subtitle: Text(
-                  "${languageProvider.isEnglish ? 'Description' : 'تفصیل'}: ${payment['description']}\n"
+              "${languageProvider.isEnglish ? 'Description' : 'تفصیل'}: ${payment['description']}\n"
                   "${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${payment['date']}\n"
-                  "${languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ'}: ${payment['paymentMethod']}",
+                  "${languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ'}: ${payment['method']}", // Use 'method' instead of 'paymentMethod'
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1580,7 +1792,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                     payment['id'],
                     payment['amount'],
                     payment['description'],
-                    payment['paymentMethod'],
+                    payment['method'], // Use 'method' instead of 'paymentMethod'
                   ),
                 ),
                 IconButton(
@@ -1592,6 +1804,6 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
           );
         },
       ),
-    );//s
+    );
   }
 }
