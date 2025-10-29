@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:onex_gas_appliances/NewEmployee/salary%20calculation.dart';
+import 'package:onex_gas_appliances/NewEmployee/salary_history_screen.dart';
 
 import 'addemployee.dart';
 import 'attendancescreen.dart';
@@ -60,6 +61,17 @@ class HomeScreen extends StatelessWidget {
                   () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => SalaryCalculationScreen()),
+              ),
+            ),
+            // Add this to your GridView in HomeScreen
+            _buildMenuCard(
+              context,
+              'Salary History',
+              Icons.history,
+              Colors.brown,
+                  () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => SalaryHistoryScreen()),
               ),
             ),
           ],

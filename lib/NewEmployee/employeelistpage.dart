@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'add_advance_screen.dart';
 import 'addexpensepage.dart';
 import 'dbworking.dart';
 import 'model.dart';
@@ -43,6 +43,19 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => AddExpenseScreen(employee: employee),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.account_balance_wallet),
+              title: Text('Add Advance'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AddAdvanceScreen(employee: employee),
                   ),
                 );
               },
@@ -115,7 +128,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(employee.address),
-                  Text('Salary: \$${employee.basicSalary} (${employee.salaryType})'),
+                  Text('Salary: PKR ${employee.basicSalary} (${employee.salaryType})'),
                   Text('Joined: ${employee.joinDate.toString().split(' ')[0]}'),
                 ],
               ),

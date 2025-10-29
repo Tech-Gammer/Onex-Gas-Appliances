@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:onex_gas_appliances/NewEmployee/salary_history_screen.dart';
 
 import 'dbworking.dart';
 import 'model.dart';
@@ -15,6 +16,8 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
   List<Employee> _employees = [];
   DateTime _selectedMonth = DateTime.now();
   Map<String, Map<String, dynamic>> _salaryResults = {};
+  Map<String, double> _advanceDeductions = {}; // Track advance deductions for each employee
+  Map<String, bool> _savedStatus = {}; // Track saved status for each employee
 
   @override
   void initState() {
@@ -47,7 +50,8 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
 
   Future<void> _calculateSalary(String employeeId) async {
     try {
-      final result = await _dbService.calculateSalary(employeeId, _selectedMonth);
+      double advanceDeduction = _advanceDeductions[employeeId] ?? 0.0;
+      final result = await _dbService.calculateSalary(employeeId, _selectedMonth, advanceDeduction: advanceDeduction);
       setState(() {
         _salaryResults[employeeId] = result;
       });
@@ -58,6 +62,61 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
     }
   }
 
+  void _showAdvanceDeductionDialog(Employee employee) {
+    double currentDeduction = _advanceDeductions[employee.id!] ?? 0.0;
+    TextEditingController deductionController = TextEditingController(text: currentDeduction.toStringAsFixed(2));
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Set Advance Deduction'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Employee: ${employee.name}'),
+            Text('Total Advance: PKR ${employee.totalAdvance}'),
+            SizedBox(height: 16),
+            TextFormField(
+              controller: deductionController,
+              decoration: InputDecoration(
+                labelText: 'Deduction Amount',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              double deduction = double.tryParse(deductionController.text) ?? 0.0;
+              if (deduction > employee.totalAdvance) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Deduction cannot exceed total advance amount!')),
+                );
+                return;
+              }
+
+              setState(() {
+                _advanceDeductions[employee.id!] = deduction;
+              });
+              Navigator.pop(context);
+
+              // Recalculate salary with new deduction
+              _calculateSalary(employee.id!);
+            },
+            child: Text('Apply'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _calculateAllSalaries() async {
     for (var employee in _employees) {
       await _calculateSalary(employee.id!);
@@ -65,6 +124,9 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
   }
 
   Widget _buildSalaryCard(Employee employee, Map<String, dynamic>? result) {
+    double advanceDeduction = _advanceDeductions[employee.id!] ?? 0.0;
+    bool isSaved = _savedStatus[employee.id!] ?? false;
+
     return Card(
       margin: EdgeInsets.symmetric(vertical: 8),
       child: Padding(
@@ -83,6 +145,9 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                     ),
                   ),
                 ),
+                if (isSaved)
+                  Icon(Icons.check_circle, color: Colors.green, size: 20),
+                SizedBox(width: 8),
                 Chip(
                   label: Text(
                     employee.salaryType.toUpperCase(),
@@ -95,7 +160,9 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
               ],
             ),
             SizedBox(height: 8),
-            Text('Basic Salary: \$${employee.basicSalary} ${employee.salaryType == 'monthly' ? '/month' : '/day'}'),
+            Text('Basic Salary: PKR ${employee.basicSalary} ${employee.salaryType == 'monthly' ? '/month' : '/day'}'),
+            Text('Total Advance: PKR ${employee.totalAdvance}',
+                style: TextStyle(color: Colors.orange)),
 
             if (result != null) ...[
               SizedBox(height: 12),
@@ -119,7 +186,7 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                 Row(
                   children: [
                     Expanded(child: Text('Daily Rate:')),
-                    Text('\$${(result['dailyRate'] as double).toStringAsFixed(2)}'),
+                    Text('PKR ${(result['dailyRate'] as double).toStringAsFixed(2)}'),
                   ],
                 ),
 
@@ -128,7 +195,7 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                 children: [
                   Expanded(child: Text('Gross Salary:')),
                   Text(
-                    '\$${(result['grossSalary'] as double).toStringAsFixed(2)}',
+                    'PKR ${(result['grossSalary'] as double).toStringAsFixed(2)}',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -138,8 +205,21 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                 children: [
                   Expanded(child: Text('Expenses Deduction:')),
                   Text(
-                    '-\$${(result['totalExpenses'] as double).toStringAsFixed(2)}',
+                    '-PKR ${(result['totalExpenses'] as double).toStringAsFixed(2)}',
                     style: TextStyle(color: Colors.red),
+                  ),
+                ],
+              ),
+
+              Row(
+                children: [
+                  Expanded(child: Text('Advance Deduction:')),
+                  InkWell(
+                    onTap: () => _showAdvanceDeductionDialog(employee),
+                    child: Text(
+                      '-PKR ${(result['advanceDeduction'] as double).toStringAsFixed(2)}',
+                      style: TextStyle(color: Colors.orange),
+                    ),
                   ),
                 ],
               ),
@@ -157,7 +237,7 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                     ),
                   ),
                   Text(
-                    '\$${(result['netSalary'] as double).toStringAsFixed(2)}',
+                    'PKR ${(result['netSalary'] as double).toStringAsFixed(2)}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -166,6 +246,39 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                   ),
                 ],
               ),
+
+              SizedBox(height: 12),
+              if (!isSaved)
+                ElevatedButton(
+                  onPressed: () => _saveSalary(employee.id!),
+                  child: Text('Save Salary'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(double.infinity, 40),
+                    backgroundColor: Colors.green,
+                  ),
+                )
+              else
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'Salary Saved',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Show expenses list if any
               if ((result['expenses'] as List).isNotEmpty) ...[
@@ -186,7 +299,7 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
                           ),
                         ),
                         Text(
-                          '-\$${expense.amount}',
+                          '-PKR ${expense.amount}',
                           style: TextStyle(fontSize: 12, color: Colors.red),
                         ),
                       ],
@@ -196,12 +309,24 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
               ],
             ] else ...[
               SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () => _calculateSalary(employee.id!),
-                child: Text('Calculate Salary'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: Size(double.infinity, 40),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _calculateSalary(employee.id!),
+                      child: Text('Calculate Salary'),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: Size(double.infinity, 40),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(Icons.money_off, color: Colors.orange),
+                    onPressed: () => _showAdvanceDeductionDialog(employee),
+                    tooltip: 'Set Advance Deduction',
+                  ),
+                ],
               ),
             ],
           ],
@@ -210,14 +335,76 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
     );
   }
 
+  Future<void> _saveSalary(String employeeId) async {
+    try {
+      final result = _salaryResults[employeeId];
+      if (result == null) return;
+
+      Salary salary = Salary(
+        employeeId: employeeId,
+        month: _selectedMonth,
+        presentDays: result['presentDays'],
+        totalWorkingDays: result['totalWorkingDays'],
+        grossSalary: result['grossSalary'],
+        totalExpenses: result['totalExpenses'],
+        advanceDeduction: result['advanceDeduction'],
+        netSalary: result['netSalary'],
+        calculationDate: DateTime.now(),
+      );
+
+      await _dbService.saveSalary(salary);
+
+      setState(() {
+        _savedStatus[employeeId] = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Salary saved successfully!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving salary: $e')),
+      );
+    }
+  }
+
+  Future<void> _saveAllSalaries() async {
+    int savedCount = 0;
+    for (var employee in _employees) {
+      if (_salaryResults.containsKey(employee.id!) && !(_savedStatus[employee.id!] ?? false)) {
+        await _saveSalary(employee.id!);
+        savedCount++;
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$savedCount salaries saved successfully!')),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     int calculatedCount = _salaryResults.length;
     int totalCount = _employees.length;
+    int savedCount = _savedStatus.values.where((saved) => saved).length;
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Calculate Salary'),
+        actions: [
+          if (savedCount > 0)
+            IconButton(
+              icon: Icon(Icons.history),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => SalaryHistoryScreen()),
+                );
+              },
+              tooltip: 'View Salary History',
+            ),
+        ],
       ),
       body: _employees.isEmpty
           ? Center(child: CircularProgressIndicator())
@@ -240,37 +427,69 @@ class _SalaryCalculationScreenState extends State<SalaryCalculationScreen> {
 
             SizedBox(height: 16),
 
-            // Calculation Progress
-            if (calculatedCount > 0)
-              Card(
-                color: Colors.blue[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Calculation Progress:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+            // Progress Indicators
+            Row(
+              children: [
+                Expanded(
+                  child: Card(
+                    color: Colors.blue[50],
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        children: [
+                          Text('Calculated', style: TextStyle(fontSize: 12)),
+                          Text('$calculatedCount/$totalCount',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                        ],
                       ),
-                      Text(
-                        '$calculatedCount/$totalCount',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Card(
+                    color: Colors.green[50],
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        children: [
+                          Text('Saved', style: TextStyle(fontSize: 12)),
+                          Text('$savedCount/$totalCount',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
 
             SizedBox(height: 16),
 
-            // Calculate All Button
-            ElevatedButton(
-              onPressed: _calculateAllSalaries,
-              child: Text('Calculate All Salaries'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(double.infinity, 50),
-              ),
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _calculateAllSalaries,
+                    child: Text('Calculate All'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: Size(double.infinity, 50),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _saveAllSalaries,
+                    child: Text('Save All'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: Size(double.infinity, 50),
+                      backgroundColor: Colors.green,
+                    ),
+                  ),
+                ),
+              ],
             ),
 
             SizedBox(height: 16),

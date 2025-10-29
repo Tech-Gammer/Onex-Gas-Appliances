@@ -5,6 +5,7 @@ class Employee {
   double basicSalary;
   String salaryType; // 'monthly' or 'daily'
   DateTime joinDate;
+  double totalAdvance; // Total advance amount taken
 
   Employee({
     this.id,
@@ -13,6 +14,8 @@ class Employee {
     required this.basicSalary,
     required this.salaryType,
     required this.joinDate,
+    this.totalAdvance = 0.0,
+
   });
 
   Map<String, dynamic> toJson() {
@@ -23,6 +26,7 @@ class Employee {
       'basicSalary': basicSalary,
       'salaryType': salaryType,
       'joinDate': joinDate.millisecondsSinceEpoch,
+      'totalAdvance': totalAdvance,
     };
   }
 
@@ -34,6 +38,8 @@ class Employee {
       basicSalary: json['basicSalary'].toDouble(),
       salaryType: json['salaryType'],
       joinDate: DateTime.fromMillisecondsSinceEpoch(json['joinDate']),
+      totalAdvance: json['totalAdvance']?.toDouble() ?? 0.0,
+
     );
   }
 }
@@ -112,6 +118,112 @@ class Expense {
       description: json['description'],
       amount: json['amount'].toDouble(),
       date: DateTime.fromMillisecondsSinceEpoch(json['date']),
+    );
+  }
+}
+
+class Advance {
+  String? id;
+  String employeeId;
+  double amount;
+  DateTime date;
+  String description;
+  bool isRepaid; // Whether this advance has been repaid
+
+  Advance({
+    this.id,
+    required this.employeeId,
+    required this.amount,
+    required this.date,
+    required this.description,
+    this.isRepaid = false,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'employeeId': employeeId,
+      'amount': amount,
+      'date': date.millisecondsSinceEpoch,
+      'description': description,
+      'isRepaid': isRepaid,
+    };
+  }
+
+  factory Advance.fromJson(Map<String, dynamic> json) {
+    return Advance(
+      id: json['id'],
+      employeeId: json['employeeId'],
+      amount: json['amount'].toDouble(),
+      date: DateTime.fromMillisecondsSinceEpoch(json['date']),
+      description: json['description'],
+      isRepaid: json['isRepaid'] ?? false,
+    );
+  }
+}
+
+class Salary {
+  String? id;
+  String employeeId;
+  DateTime month; // The month for which salary is calculated
+  int presentDays;
+  int totalWorkingDays;
+  double grossSalary;
+  double totalExpenses;
+  double advanceDeduction;
+  double netSalary;
+  DateTime calculationDate;
+  bool isPaid;
+  DateTime? paymentDate;
+
+  Salary({
+    this.id,
+    required this.employeeId,
+    required this.month,
+    required this.presentDays,
+    required this.totalWorkingDays,
+    required this.grossSalary,
+    required this.totalExpenses,
+    required this.advanceDeduction,
+    required this.netSalary,
+    required this.calculationDate,
+    this.isPaid = false,
+    this.paymentDate,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'employeeId': employeeId,
+      'month': month.millisecondsSinceEpoch,
+      'presentDays': presentDays,
+      'totalWorkingDays': totalWorkingDays,
+      'grossSalary': grossSalary,
+      'totalExpenses': totalExpenses,
+      'advanceDeduction': advanceDeduction,
+      'netSalary': netSalary,
+      'calculationDate': calculationDate.millisecondsSinceEpoch,
+      'isPaid': isPaid,
+      'paymentDate': paymentDate?.millisecondsSinceEpoch,
+    };
+  }
+
+  factory Salary.fromJson(Map<String, dynamic> json) {
+    return Salary(
+      id: json['id'],
+      employeeId: json['employeeId'],
+      month: DateTime.fromMillisecondsSinceEpoch(json['month']),
+      presentDays: json['presentDays'],
+      totalWorkingDays: json['totalWorkingDays'],
+      grossSalary: json['grossSalary'].toDouble(),
+      totalExpenses: json['totalExpenses'].toDouble(),
+      advanceDeduction: json['advanceDeduction'].toDouble(),
+      netSalary: json['netSalary'].toDouble(),
+      calculationDate: DateTime.fromMillisecondsSinceEpoch(json['calculationDate']),
+      isPaid: json['isPaid'] ?? false,
+      paymentDate: json['paymentDate'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['paymentDate'])
+          : null,
     );
   }
 }

@@ -162,8 +162,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(employee.salaryType == 'monthly'
-                              ? 'Monthly - \$${employee.basicSalary}/month'
-                              : 'Daily - \$${employee.basicSalary}/day'),
+                              ? 'Monthly - PKR ${employee.basicSalary}/month'
+                              : 'Daily - PKR ${employee.basicSalary}/day'),
                           Text(
                             isPresent ? 'PRESENT' : 'ABSENT',
                             style: TextStyle(
