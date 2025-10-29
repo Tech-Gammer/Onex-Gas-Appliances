@@ -129,27 +129,5 @@ class DatabaseService {
     };
   }
 
-// Helper method to calculate working days in a month (excluding weekends)
-//   int _getWorkingDaysInMonth(DateTime month) {
-//     DateTime firstDay = DateTime(month.year, month.month, 1);
-//     DateTime lastDay = DateTime(month.year, month.month + 1, 0);
-//
-//     int workingDays = 0;
-//     DateTime currentDay = firstDay;
-//
-//     while (currentDay.isBefore(lastDay) || currentDay.isAtSameMomentAs(lastDay)) {
-//       // Check if it's a weekday (Monday to Friday)
-//       if (currentDay.weekday != DateTime.saturday && currentDay.weekday != DateTime.sunday) {
-//         workingDays++;
-//       }
-//       currentDay = currentDay.add(Duration(days: 1));
-//     }
-//
-//     return workingDays;
-//   }
-  int _getWorkingDaysInMonth(DateTime month) {
-    return 30; // Always return 30 days
-  }
-
 
 }
